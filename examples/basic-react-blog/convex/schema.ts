@@ -1,8 +1,8 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { defineJoinTable } from "zenvex";
+import { defineJoinTable, defineRelations } from "zenvex";
 
-export default defineSchema({
+const schema = defineSchema({
   users: defineTable({
     firstName: v.string(),
     lastName: v.string(),
@@ -31,20 +31,26 @@ export default defineSchema({
   }).index("by_postId", ["postId"]),
 });
 
-// export const relations = defineRelations(schema, {
-//   posts: (r) => ({
-//     author: r.one.users({ by: "authorId" }),
-//     comments: r.many.comments.by_postId({ onDelete: "cascade" }),
-//   }),
-//   comments: (r) => ({
-//     post: r.one.posts({ by: "postId" }),
-//     author: r.one.users({ by: "authorId" }),
-//   }),
-//   users: (r) => ({
-//     posts: r.many.posts.by_author({ onDelete: "cascade" }),
-//   }),
-// });
-//
+export default schema;
+
+export const relations = defineRelations(schema, {
+  posts: (r) => ({
+    author: r.one.users({ by: "authorId" }),
+    comments: r.many.comments({ onDelete: "cascade" }),
+    tags: r.many.tags({ through: "postsTags" }),
+  }),
+  comments: (r) => ({
+    post: r.one.posts({ by: "postId" }),
+    author: r.one.users({ by: "authorId" }),
+  }),
+  tags: (r) => ({
+    posts: r.many.posts({ through: "postsTags" }),
+  }),
+  users: (r) => ({
+    posts: r.many.posts({ onDelete: "cascade" }),
+  }),
+});
+
 // export const computed = defineComputed(schema, {
 //   posts: {
 //     url: (post) => `/blog/${post.slug}`,
