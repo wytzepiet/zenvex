@@ -14,9 +14,9 @@ Zenvex is a lightweight, type-safe query layer for Convex. It adds relations, co
 ## Commands
 
 ```bash
-bun install          # install dependencies
+bun install          # install dependencies (run from workspace root)
 bun test             # run tests
-bun run build        # build for publishing
+bun run build        # build — must run after source changes for examples/ to pick up new types
 bunx tsc --noEmit    # typecheck
 ```
 
@@ -67,9 +67,7 @@ Two functions: `createZenReader` (queries) and `createZenWriter` (mutations). Bo
 
 ```typescript
 // convex/zen.ts
-import schema from "./schema";
-import { relations } from "./relations";
-import { computed } from "./computed";
+import schema, { relations, computed } from "./schema";
 
 export const zenOptions = { schema, relations, computed } as const;
 
@@ -102,7 +100,7 @@ Use the types in helper functions:
 import type { ZenReader } from "./zen";
 
 async function getPostWithAuthor(zen: ZenReader, slug: string) {
-  return zen.posts.by_slug(slug).findFirst({ with: { author: true } });
+  return zen.posts.bySlug(slug).findFirst({ with: { author: true } });
 }
 ```
 
@@ -130,28 +128,64 @@ zen.users; // → table proxy for "users"
 
 The table proxy intercepts property access:
 
-- Known methods (`findMany`, `findFirst`, `findByIds`, `delete`, `insert`, `patch`, `upsert`, `withIndex`) → return their implementations directly
+- Known methods (`findMany`, `findFirst`, `findByIds`, `delete`, `insert`, `patch`, `upsert`) → return their implementations directly
 - Anything else → treated as an index name, delegates to § Index Proxy
 
 ---
 
 ## § Index Proxy
 
-Second proxy layer. `zen.posts.by_author` traps the index name, returns a callable function.
+Second proxy layer. `zen.posts.byAuthor` traps the index name, returns a callable function.
 
 ```typescript
-zen.posts.by_author; // → function expecting positional args
-zen.posts.by_author(userId); // → query builder (§ Query Builder)
+zen.posts.byAuthor; // → function expecting positional args
+zen.posts.byAuthor(userId); // → query builder (§ Query Builder)
 ```
 
-Positional args are equality values for the index fields, in order. These map to `.withIndex("by_author", (q) => q.eq("authorId", userId))` under the hood.
+Positional args map to index fields in order. Plain values become equality constraints. These map to `.withIndex("byAuthor", (q) => q.eq("authorId", userId))` under the hood.
 
 Multi-field indexes:
 
 ```typescript
-zen.posts.by_author_status(userId, "published");
-// → .withIndex("by_author_status", (q) => q.eq("authorId", userId).eq("status", "published"))
+zen.posts.byAuthorStatus(userId, "published");
+// → .withIndex("byAuthorStatus", (q) => q.eq("authorId", userId).eq("status", "published"))
 ```
+
+Args are optional — provide any prefix of the index fields, or none at all (useful when you just need the index for ordering):
+
+```typescript
+zen.posts.byAuthorDate().findMany({ order: "desc" });         // no args, index used for ordering only
+zen.posts.byAuthorDate(userId).findMany();                     // just first field
+zen.posts.byAuthorDate(userId, someDate).findMany();           // both fields, equality
+```
+
+### Range queries
+
+The last positional arg can be a range marker instead of a plain value, using the `q` builder exported from `zenvex`:
+
+```typescript
+import { q } from "zenvex";
+
+zen.posts.byDate(q.gte(start).lte(end)).findMany();
+zen.posts.byAuthorDate(userId, q.gt(someDate)).findMany();
+```
+
+`q.gt()` / `q.gte()` returns a type that only exposes `.lt()` / `.lte()` (and vice versa), matching Convex's constraint that lower bound comes before upper bound. Chaining is optional — a single bound like `q.gt(value)` is valid.
+
+At runtime, the range marker is just data (`{ lower?: { op, value }, upper?: { op, value } }`). It gets applied inside the `withIndex` callback after all equality args.
+
+You cannot skip fields in the middle (Convex constraint).
+
+### CamelCase index naming
+
+Index names become method names, so camelCase is recommended:
+
+```typescript
+.index("byAuthor", ["authorId"])
+// → zen.posts.byAuthor(userId)
+```
+
+Not enforced — zenvex reads whatever names you define. But camelCase reads like a natural API.
 
 ---
 
@@ -161,11 +195,11 @@ Third proxy layer. Holds table name, index name, and args. Exposes terminal meth
 
 ```typescript
 // findMany — returns array
-await zen.posts.by_author(userId).findMany();
-await zen.posts.by_author(userId).findMany({ with: { author: true } });
+await zen.posts.byAuthor(userId).findMany();
+await zen.posts.byAuthor(userId).findMany({ with: { author: true } });
 
 // findFirst — returns single doc or null
-await zen.posts.by_slug("hello").findFirst();
+await zen.posts.bySlug("hello").findFirst();
 
 // Full table scan (no index)
 await zen.posts.findMany();
@@ -175,10 +209,10 @@ await zen.posts.findFirst();
 ### Query options
 
 ```typescript
-zen.posts.by_author(userId).findMany({
+zen.posts.byAuthor(userId).findMany({
   with: { author: true, comments: true }, // § Relation Resolution
   select: ["_id", "title", "slug"], // field selection (or use omit)
-  filter: (q) => q.gt(q.field("likes"), 10), // native Convex filter syntax
+  filter: (post) => post.likes > 10 && post.tags.includes("happy"), // plain JS via convex-helpers
   order: "desc", // maps to .order()
   limit: 5, // maps to .take()
 });
@@ -191,23 +225,11 @@ zen.posts.by_author(userId).findMany({
 When `paginate` is present, return type changes from `Doc[]` to `{ data: Doc[], cursor: string, hasMore: boolean }`.
 
 ```typescript
-const page = await zen.posts.by_author(userId).findMany({
+const page = await zen.posts.byAuthor(userId).findMany({
   with: { author: true },
   paginate: { cursor, numItems: 20 },
 });
 // page.data, page.cursor, page.hasMore
-```
-
-### Range queries (escape hatch)
-
-For `gt`, `gte`, `lt`, `lte` — use `.withIndex()` which mirrors native Convex:
-
-```typescript
-zen.posts
-  .withIndex("by_author_date", (q) =>
-    q.eq("authorId", userId).gt("date", someDate),
-  )
-  .findMany();
 ```
 
 ---
@@ -217,21 +239,18 @@ zen.posts
 Parses the user's relation config into introspectable descriptors. Each table gets its own callback so TypeScript can type `r` per table.
 
 ```typescript
-// convex/relations.ts
-import { defineRelations } from "zenvex";
-import schema from "./schema";
-
+// convex/schema.ts (named export alongside schema)
 export const relations = defineRelations(schema, {
   posts: (r) => ({
     author: r.one.users({ by: "authorId" }),
-    comments: r.many.comments.by_postId({ onDelete: "cascade" }),
+    comments: r.many.comments.byPostId({ onDelete: "cascade" }),
   }),
   comments: (r) => ({
     post: r.one.posts({ by: "postId" }),
     author: r.one.users({ by: "authorId" }),
   }),
   users: (r) => ({
-    posts: r.many.posts.by_author({ onDelete: "cascade" }),
+    posts: r.many.posts.byAuthor({ onDelete: "cascade" }),
     groups: r.many.groups.through("userGroups"),
   }),
   groups: (r) => ({
@@ -240,11 +259,7 @@ export const relations = defineRelations(schema, {
 });
 ```
 
-Defined in a separate file from the schema. Reasons:
-
-- Schema is vanilla Convex (untouched)
-- Circular references (posts→users→posts) are fine with per-table callbacks
-- Different concerns: schema = db, relations = app logic
+Defined as a named export in `schema.ts` alongside the schema default export. Schema stays vanilla Convex (untouched). Circular references (posts→users→posts) are fine with per-table callbacks. User can split into a separate file if preferred.
 
 ---
 
@@ -265,10 +280,10 @@ Resolution: `ctx.db.get(doc.authorId)`. Direct ID lookup, no index needed.
 One-to-many. Queries the **target** table by a named index. The index name matches the query builder pattern.
 
 ```typescript
-comments: r.many.comments.by_postId({ onDelete: "cascade" }),
+comments: r.many.comments.byPostId({ onDelete: "cascade" }),
 ```
 
-Resolution: `ctx.db.query("comments").withIndex("by_postId", (q) => q.eq("postId", doc._id)).collect()`.
+Resolution: `ctx.db.query("comments").withIndex("byPostId", (q) => q.eq("postId", doc._id)).collect()`.
 
 Options: `{ onDelete: "cascade" | "setNull" | "restrict" }`.
 
@@ -320,7 +335,7 @@ When processing `with` in a query:
 ### Nested relation options
 
 ```typescript
-zen.posts.by_author(userId).findMany({
+zen.posts.byAuthor(userId).findMany({
   with: {
     comments: {
       with: { author: true },
@@ -338,10 +353,7 @@ zen.posts.by_author(userId).findMany({
 Sync, pure transforms of the document's own data. Always included on results — no `with` needed.
 
 ```typescript
-// convex/computed.ts
-import { defineComputed } from "zenvex";
-import schema from "./schema";
-
+// convex/schema.ts (named export alongside schema)
 export const computed = defineComputed(schema, {
   posts: {
     url: (post) => `/blog/${post.slug}`,
@@ -354,7 +366,7 @@ export const computed = defineComputed(schema, {
 ```
 
 ```typescript
-const post = await zen.posts.by_slug("hello").findFirst();
+const post = await zen.posts.bySlug("hello").findFirst();
 post.url; // → "/blog/hello" — always there
 post.excerpt; // → "Lorem ipsum..." — always there
 ```
@@ -396,8 +408,8 @@ Generates:
 
 - `usersId: v.id("users")` field
 - `groupsId: v.id("groups")` field
-- `.index("by_usersId", ["usersId"])`
-- `.index("by_groupsId", ["groupsId"])`
+- `.index("byUsersId", ["usersId"])`
+- `.index("byGroupsId", ["groupsId"])`
 
 Field naming: `${tableName}Id` — no singularization. User never types these names. Third argument (extra fields) is optional.
 
@@ -419,7 +431,7 @@ schema.tables.userGroups.validator.fields;
 
 ```typescript
 schema.tables.userGroups.indexes();
-// [{ indexDescriptor: "by_usersId", fields: ["usersId", "_creationTime"] }]
+// [{ indexDescriptor: "byUsersId", fields: ["usersId", "_creationTime"] }]
 ```
 
 Used by § r.many.through to auto-resolve join table indexes. If Convex changes this API, `through()` resolution needs updating.
@@ -477,7 +489,7 @@ await zen.posts.patch(postId, { title: "Updated" });
 Find-or-create pattern. First arg is `{ _id } | null` (typically from a `findFirst`). If null → insert. If exists → patch. Returns the ID.
 
 ```typescript
-const id = await zen.users.upsert(await zen.users.by_email(email).findFirst(), {
+const id = await zen.users.upsert(await zen.users.byEmail(email).findFirst(), {
   email,
   name,
   lastSeen: Date.now(),
@@ -522,9 +534,7 @@ import {
   CreateZenReader,
   CreateZenWriter,
 } from "zenvex";
-import schema from "./schema";
-import { relations } from "./relations";
-import { computed } from "./computed";
+import schema, { relations, computed } from "./schema";
 
 export const zenOptions = { schema, relations, computed } as const;
 
@@ -538,7 +548,7 @@ export type ZenWriter = CreateZenWriter<typeof zenOptions>;
 import type { ZenReader } from "./zen";
 
 async function getPostWithAuthor(zen: ZenReader, slug: string) {
-  return zen.posts.by_slug(slug).findFirst({ with: { author: true } });
+  return zen.posts.bySlug(slug).findFirst({ with: { author: true } });
 }
 ```
 
@@ -550,7 +560,7 @@ async function getPostWithAuthor(zen: ZenReader, slug: string) {
 - Max 32 indexes per table
 - `_creationTime` is automatically appended to every index
 - Equality fields must come first; only the last field can use range operators
-- `.filter()` runs during iteration (streaming), not after collection
+- `filter()` from `convex-helpers/server/filter` supports plain JS predicates, streams during iteration (see https://stack.convex.dev/complex-filters-in-convex)
 - `.filter().take(n)` correctly gives n filtered results
 - Mutations are transactions — all writes atomic
 - No SQL, no JOIN, no COUNT, no aggregates
@@ -562,12 +572,12 @@ async function getPostWithAuthor(zen: ZenReader, slug: string) {
 
 ```
 convex/
-  schema.ts      ← vanilla Convex (untouched)
-  relations.ts   ← defineRelations(schema, { ... })
-  computed.ts    ← defineComputed(schema, { ... })
+  schema.ts      ← schema (default export), relations + computed (named exports)
   zen.ts         ← zenOptions + ZenReader/ZenWriter types
   functions.ts   ← customQuery/customMutation using zenOptions
 ```
+
+Schema is the default export, relations and computed are named exports from the same file. User can split into separate files if they prefer.
 
 ---
 
@@ -614,7 +624,8 @@ zenvex/
 
 These were deliberately excluded. Do not add without discussion.
 
-- **Custom filter syntax** — use Convex's native filter builder
+- **Custom filter syntax** — plain JS predicates via `convex-helpers/server/filter` is the API
+- **`.withIndex()` escape hatch** — the `q` range builder covers range queries, no separate API needed
 - **Soft delete** — too opinionated, users implement manually
 - **Client extensions / middleware / hooks** — not v1
 - **Model methods** (Prisma `$extends.model`) — just use functions
