@@ -2,5 +2,8 @@
   "workspaces": [
     "packages/*",
     "examples/*"
-  ]
+  ],
+  "overrides": {
+    "@types/node": "^25.2.3"
+  }
 }
