@@ -22,6 +22,7 @@
   "devDependencies": {
     "@types/bun": "^1.3.9",
     "expect-type": "^1.3.0",
+    "type-fest": "^5.4.4",
     "typescript": "^5.9.3"
   },
   "dependencies": {
@@ -29,5 +30,14 @@
   },
   "peerDependencies": {
     "convex": "^1.31.7"
+  },
+  "license": "MIT",
+  "description": "Type-safe query layer for Convex. Relations, cascading deletes, index query ergonomics — no codegen.",
+  "keywords": ["convex", "orm", "relations", "typescript", "query-builder"],
+  "author": "Wytze Sligting",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wytzesligting/zenvex.git",
+    "directory": "packages/zenvex"
   }
 }
