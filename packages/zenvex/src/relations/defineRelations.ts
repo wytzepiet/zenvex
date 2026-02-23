@@ -1,278 +1,328 @@
-import type { GenericSchema, SchemaDefinition } from "convex/server";
 import type {
-  RelationsConfig,
-  ResolvedRelations,
-  OneDescriptor,
+  GenericSchema,
+  SchemaDefinition,
+  TableDefinition,
+} from "convex/server";
+import type { GenericId, VId, VObject } from "convex/values";
+import { introspect, type SchemaIntrospection } from "./introspect.js";
+import type {
   ManyDescriptor,
-  ThroughDescriptor,
   OnDeleteAction,
-} from "./types";
+  OneDescriptor,
+  RelationDescriptor,
+  ThroughDescriptor,
+} from "./types.js";
+import { makeGetProxy } from "../utils/makeGetProxy.js";
 
-interface SchemaIntrospection {
-  tableNames: Set<string>;
-  /** field name → target table name, for v.id() fields */
-  idFields: (tableName: string) => Map<string, string>;
-  /** user-defined index names (excludes system indexes) */
-  indexNames: (tableName: string) => Set<string>;
-  /** first field of each index → set of first-field names */
-  indexFirstFields: (tableName: string) => Set<string>;
-  /** index names on targetTable whose first field is a v.id() pointing to sourceTable */
-  indexesPointingTo: (targetTable: string, sourceTable: string) => string[];
-}
+/** Symbol key for embedding the schema reference on defineRelations output. */
+export const ZEN_SCHEMA: unique symbol = Symbol("zenvex.schema");
 
-function introspect(schema: SchemaDefinition<any, any>): SchemaIntrospection {
-  const tables: Record<string, any> = schema.tables;
-  const tableNames = new Set(Object.keys(tables));
+// ---------------------------------------------------------------------------
+// Type-level schema extraction
+// ---------------------------------------------------------------------------
 
-  const idFieldsCache = new Map<string, Map<string, string>>();
-  const indexNamesCache = new Map<string, Set<string>>();
-  const indexFirstFieldsCache = new Map<string, Set<string>>();
-  const indexesPointingToCache = new Map<string, string[]>();
+type ExtractFields<T> =
+  T extends TableDefinition<infer V, any, any, any>
+    ? V extends VObject<any, infer Fields, any, any>
+      ? Fields
+      : never
+    : never;
 
-  function getIndexes(tableName: string): { indexDescriptor: string; fields: string[] }[] {
-    const tableDef = tables[tableName];
-    if (tableDef && typeof tableDef[" indexes"] === "function") {
-      return tableDef[" indexes"]();
-    }
-    return [];
-  }
+type ExtractIndexes<T> =
+  T extends TableDefinition<any, infer I, any, any> ? I : never;
 
-  const self: SchemaIntrospection = {
-    tableNames,
+// ---------------------------------------------------------------------------
+// Type-level helpers
+// ---------------------------------------------------------------------------
 
-    idFields(tableName: string): Map<string, string> {
-      let cached = idFieldsCache.get(tableName);
-      if (cached) return cached;
+/** Field names on SourceTable that are v.id(TargetTable) — required or optional. */
+type IdFieldsFor<
+  Schema,
+  SourceTable extends keyof Schema & string,
+  TargetTable extends string,
+> = {
+  [K in keyof ExtractFields<Schema[SourceTable]> & string]:
+    ExtractFields<Schema[SourceTable]>[K] extends VId<infer IdType, any>
+      ? GenericId<TargetTable> extends IdType ? K : never
+      : never;
+}[keyof ExtractFields<Schema[SourceTable]> & string];
 
-      cached = new Map();
-      const tableDef = tables[tableName];
-      if (tableDef?.validator?.fields) {
-        const fields: Record<string, any> = tableDef.validator.fields;
-        for (const [fieldName, validator] of Object.entries(fields)) {
-          if (validator && validator.kind === "id" && typeof validator.tableName === "string") {
-            cached.set(fieldName, validator.tableName);
-          }
-        }
+/** User-defined index names for a table. */
+type UserIndexes<Schema, TN extends keyof Schema & string> = Exclude<
+  keyof ExtractIndexes<Schema[TN]> & string,
+  "by_id" | "by_creation_time"
+>;
+
+/** Index names on TargetTable whose first field is v.id(SourceTable). */
+type IndexesPointingTo<
+  Schema,
+  TargetTable extends keyof Schema & string,
+  SourceTable extends string,
+> = {
+  [IX in UserIndexes<Schema, TargetTable>]:
+    ExtractIndexes<Schema[TargetTable]>[IX] extends [infer First, ...unknown[]]
+      ? First extends IdFieldsFor<Schema, TargetTable, SourceTable>
+        ? IX
+        : never
+      : never;
+}[UserIndexes<Schema, TargetTable>];
+
+/** True when T is a union of two or more members. */
+type IsUnion<T, Copy = T> = [T] extends [never]
+  ? false
+  : T extends unknown
+    ? [Copy] extends [T] ? false : true
+    : never;
+
+type CanAutoResolve<
+  Schema,
+  SourceTable extends keyof Schema & string,
+  TargetTable extends keyof Schema & string,
+> = [IndexesPointingTo<Schema, TargetTable, SourceTable>] extends [never]
+  ? false
+  : true extends IsUnion<IndexesPointingTo<Schema, TargetTable, SourceTable>>
+    ? false
+    : true;
+
+// ---------------------------------------------------------------------------
+// r.one proxy type
+// ---------------------------------------------------------------------------
+
+type ROneProxy<Schema, SourceTable extends keyof Schema & string> = {
+  [TT in keyof Schema & string]: (
+    foreignKey: IdFieldsFor<Schema, SourceTable, TT>,
+  ) => OneDescriptor<TT, IdFieldsFor<Schema, SourceTable, TT>>;
+};
+
+// ---------------------------------------------------------------------------
+// r.many proxy type
+// ---------------------------------------------------------------------------
+
+type ManyThroughOpts = {
+  through: string;
+  index?: string;
+  onDelete?: OnDeleteAction;
+};
+
+type RManyFn<
+  Schema,
+  SourceTable extends keyof Schema & string,
+  TargetTable extends keyof Schema & string,
+> = {
+  (opts: ManyThroughOpts): ThroughDescriptor<TargetTable, string>;
+} & (
+  true extends CanAutoResolve<Schema, SourceTable, TargetTable>
+    ? {
+        (opts?: { index?: IndexesPointingTo<Schema, TargetTable, SourceTable>; onDelete?: OnDeleteAction }): ManyDescriptor<TargetTable>;
+        (): ManyDescriptor<TargetTable>;
       }
-      idFieldsCache.set(tableName, cached);
-      return cached;
-    },
-
-    indexNames(tableName: string): Set<string> {
-      let cached = indexNamesCache.get(tableName);
-      if (cached) return cached;
-
-      cached = new Set<string>();
-      const indexes = getIndexes(tableName);
-      for (const idx of indexes) {
-        if (idx.indexDescriptor !== "by_id" && idx.indexDescriptor !== "by_creation_time") {
-          cached.add(idx.indexDescriptor);
-        }
+    : {
+        (opts: { index: IndexesPointingTo<Schema, TargetTable, SourceTable>; onDelete?: OnDeleteAction }): ManyDescriptor<TargetTable>;
       }
-      indexNamesCache.set(tableName, cached);
-      return cached;
-    },
+);
 
-    indexFirstFields(tableName: string): Set<string> {
-      let cached = indexFirstFieldsCache.get(tableName);
-      if (cached) return cached;
+type RManyProxy<Schema, SourceTable extends keyof Schema & string> = {
+  [TT in keyof Schema & string]: RManyFn<Schema, SourceTable, TT>;
+};
 
-      cached = new Set<string>();
-      const indexes = getIndexes(tableName);
-      for (const idx of indexes) {
-        if (idx.fields.length > 0 && idx.indexDescriptor !== "by_id" && idx.indexDescriptor !== "by_creation_time") {
-          cached.add(idx.fields[0]!);
-        }
-      }
-      indexFirstFieldsCache.set(tableName, cached);
-      return cached;
-    },
+// ---------------------------------------------------------------------------
+// RBuilder — the full r object passed to each table's callback
+// ---------------------------------------------------------------------------
 
-    indexesPointingTo(targetTable: string, sourceTable: string): string[] {
-      const cacheKey = `${targetTable}:${sourceTable}`;
-      let cached = indexesPointingToCache.get(cacheKey);
-      if (cached) return cached;
+type RBuilder<Schema, SourceTable extends keyof Schema & string> = {
+  one: ROneProxy<Schema, SourceTable>;
+  many: RManyProxy<Schema, SourceTable>;
+};
 
-      const idFields = self.idFields(targetTable);
-      // Find field names on targetTable that are v.id() pointing to sourceTable
-      const sourceIdFields = new Set<string>();
-      idFields.forEach((pointsTo, fieldName) => {
-        if (pointsTo === sourceTable) sourceIdFields.add(fieldName);
-      });
+// ---------------------------------------------------------------------------
+// Config and return types
+// ---------------------------------------------------------------------------
 
-      cached = [];
-      const indexes = getIndexes(targetTable);
-      for (const idx of indexes) {
-        if (idx.indexDescriptor === "by_id" || idx.indexDescriptor === "by_creation_time") continue;
-        if (idx.fields.length > 0 && sourceIdFields.has(idx.fields[0]!)) {
-          cached.push(idx.indexDescriptor);
-        }
-      }
-      indexesPointingToCache.set(cacheKey, cached);
-      return cached;
-    },
-  };
+type RelationsConfig<Schema> = {
+  [TN in keyof Schema & string]?: (
+    r: RBuilder<Schema, TN>,
+  ) => Record<string, RelationDescriptor>;
+};
 
-  return self;
-}
+type ResolvedRelations<Config> = {
+  [K in keyof Config]: Config[K] extends (...args: any[]) => infer R ? R : never;
+};
+
+// ---------------------------------------------------------------------------
+// Runtime: build r.one proxy (resolves at call time)
+// ---------------------------------------------------------------------------
 
 function buildOneProxy(
   sourceTable: string,
   info: SchemaIntrospection,
-): object {
-  return new Proxy(Object.create(null), {
-    get(_target, targetTable: string) {
-      if (!info.tableNames.has(targetTable)) {
+): Record<string, (fk: string) => OneDescriptor> {
+  return makeGetProxy<Record<string, (fk: string) => OneDescriptor>>((targetTable) => {
+    return (foreignKey: string): OneDescriptor => {
+      const idFields = info.idFields(sourceTable);
+      const field = idFields.get(foreignKey);
+      if (!field) {
         throw new Error(
-          `[defineRelations] ${sourceTable}.r.one.${targetTable}: table "${targetTable}" does not exist in schema`,
+          `[defineRelations] ${sourceTable}.${foreignKey}: field not found or is not a v.id() field`,
         );
       }
-
-      return (opts: { by: string }): OneDescriptor => {
-        const idFields = info.idFields(sourceTable);
-        const field = opts.by;
-
-        if (!idFields.has(field)) {
-          throw new Error(
-            `[defineRelations] ${sourceTable}.r.one.${targetTable}({ by: "${field}" }): field "${field}" is not a v.id() field on table "${sourceTable}"`,
-          );
-        }
-
-        const pointsTo = idFields.get(field)!;
-        if (pointsTo !== targetTable) {
-          throw new Error(
-            `[defineRelations] ${sourceTable}.r.one.${targetTable}({ by: "${field}" }): field "${field}" is v.id("${pointsTo}"), not v.id("${targetTable}")`,
-          );
-        }
-
-        return { type: "one", targetTable, foreignKey: field };
+      if (field.tableName !== targetTable) {
+        throw new Error(
+          `[defineRelations] ${sourceTable}.${foreignKey}: field points to "${field.tableName}", not "${targetTable}"`,
+        );
+      }
+      return {
+        type: "one",
+        targetTable,
+        foreignKey,
+        optional: field.optional,
       };
-    },
+    };
   });
 }
+
+// ---------------------------------------------------------------------------
+// Runtime: build r.many proxy (resolves at call time)
+// ---------------------------------------------------------------------------
 
 function buildManyProxy(
   sourceTable: string,
   info: SchemaIntrospection,
-): object {
-  return new Proxy(Object.create(null), {
-    get(_target, targetTable: string) {
-      if (!info.tableNames.has(targetTable)) {
-        throw new Error(
-          `[defineRelations] ${sourceTable}.r.many.${targetTable}: table "${targetTable}" does not exist in schema`,
-        );
+): Record<string, (opts?: Record<string, unknown>) => ManyDescriptor | ThroughDescriptor> {
+  return makeGetProxy<Record<string, (opts?: Record<string, unknown>) => ManyDescriptor | ThroughDescriptor>>((targetTable) => {
+    return (opts?: Record<string, unknown>): ManyDescriptor | ThroughDescriptor => {
+      if (opts?.through) {
+        return resolveThrough(info, sourceTable, targetTable, opts);
       }
-
-      // Return a function: r.many.<targetTable>(opts?)
-      return (opts?: {
-        through?: string;
-        index?: string;
-        onDelete?: OnDeleteAction;
-      }): ManyDescriptor | ThroughDescriptor => {
-        // through path
-        if (opts?.through) {
-          const joinTable = opts.through;
-
-          if (!info.tableNames.has(joinTable)) {
-            throw new Error(
-              `[defineRelations] ${sourceTable}.r.many.${targetTable}({ through: "${joinTable}" }): table "${joinTable}" does not exist in schema`,
-            );
-          }
-
-          const joinIdFields = info.idFields(joinTable);
-
-          // Must have a v.id() field pointing to source table
-          let sourceFieldName: string | undefined;
-          joinIdFields.forEach((target, field) => {
-            if (target === sourceTable) sourceFieldName = field;
-          });
-          if (!sourceFieldName) {
-            throw new Error(
-              `[defineRelations] ${sourceTable}.r.many.${targetTable}({ through: "${joinTable}" }): join table "${joinTable}" has no v.id("${sourceTable}") field`,
-            );
-          }
-
-          // Must have a v.id() field pointing to target table
-          let targetFieldName: string | undefined;
-          joinIdFields.forEach((target, field) => {
-            if (target === targetTable) targetFieldName = field;
-          });
-          if (!targetFieldName) {
-            throw new Error(
-              `[defineRelations] ${sourceTable}.r.many.${targetTable}({ through: "${joinTable}" }): join table "${joinTable}" has no v.id("${targetTable}") field`,
-            );
-          }
-
-          // Must have an index whose first field is the source id field
-          const firstFields = info.indexFirstFields(joinTable);
-          if (!firstFields.has(sourceFieldName)) {
-            throw new Error(
-              `[defineRelations] ${sourceTable}.r.many.${targetTable}({ through: "${joinTable}" }): join table "${joinTable}" has no index starting with "${sourceFieldName}" (needed to query by ${sourceTable})`,
-            );
-          }
-
-          return { type: "through", targetTable, joinTable };
-        }
-
-        // one-to-many path
-        if (opts?.index) {
-          // Explicit index
-          const indexName = opts.index;
-          const indexes = info.indexNames(targetTable);
-          if (!indexes.has(indexName)) {
-            throw new Error(
-              `[defineRelations] ${sourceTable}.r.many.${targetTable}({ index: "${indexName}" }): index "${indexName}" does not exist on table "${targetTable}"`,
-            );
-          }
-
-          // Validate the index's first field points back to source
-          const pointingIndexes = info.indexesPointingTo(targetTable, sourceTable);
-          if (!pointingIndexes.includes(indexName)) {
-            throw new Error(
-              `[defineRelations] ${sourceTable}.r.many.${targetTable}({ index: "${indexName}" }): index "${indexName}" on table "${targetTable}" does not have a v.id("${sourceTable}") as its first field`,
-            );
-          }
-
-          return {
-            type: "many",
-            targetTable,
-            index: indexName,
-            ...(opts.onDelete != null ? { onDelete: opts.onDelete } : {}),
-          };
-        }
-
-        // Auto-resolve: find indexes on target whose first field is v.id(sourceTable)
-        const matching = info.indexesPointingTo(targetTable, sourceTable);
-
-        if (matching.length === 0) {
-          throw new Error(
-            `[defineRelations] ${sourceTable}.r.many.${targetTable}(): no index on table "${targetTable}" has a v.id("${sourceTable}") as its first field. Specify an explicit index with { index: "..." }`,
-          );
-        }
-
-        if (matching.length > 1) {
-          throw new Error(
-            `[defineRelations] ${sourceTable}.r.many.${targetTable}(): multiple indexes on table "${targetTable}" point to "${sourceTable}": ${matching.map((n) => `"${n}"`).join(", ")}. Specify an explicit index with { index: "..." }`,
-          );
-        }
-
-        return {
-          type: "many",
-          targetTable,
-          index: matching[0]!,
-          ...(opts?.onDelete != null ? { onDelete: opts.onDelete } : {}),
-        };
-      };
-    },
+      return resolveDirect(info, sourceTable, targetTable, opts);
+    };
   });
 }
 
-function buildRBuilder(sourceTable: string, info: SchemaIntrospection): object {
+function resolveDirect(
+  info: SchemaIntrospection,
+  sourceTable: string,
+  targetTable: string,
+  opts?: Record<string, unknown>,
+): ManyDescriptor {
+  const explicitIndex = opts?.index as string | undefined;
+  const onDelete = opts?.onDelete as OnDeleteAction | undefined;
+
+  if (explicitIndex) {
+    const fk = info.indexFirstField(targetTable, explicitIndex);
+    if (!fk) {
+      throw new Error(
+        `[defineRelations] ${sourceTable} → many.${targetTable}({ index: "${explicitIndex}" }): index not found on table "${targetTable}"`,
+      );
+    }
+    return {
+      type: "many",
+      targetTable,
+      index: explicitIndex,
+      foreignKey: fk,
+      ...(onDelete != null ? { onDelete } : {}),
+    };
+  }
+
+  // Auto-resolve
+  const matching = info.indexesPointingTo(targetTable, sourceTable);
+  if (matching.length === 0) {
+    throw new Error(
+      `[defineRelations] ${sourceTable} → many.${targetTable}(): no index on "${targetTable}" has a v.id("${sourceTable}") as its first field. Use { index: "..." }`,
+    );
+  }
+  if (matching.length > 1) {
+    throw new Error(
+      `[defineRelations] ${sourceTable} → many.${targetTable}(): multiple indexes on "${targetTable}" point to "${sourceTable}": ${matching.map((n) => `"${n}"`).join(", ")}. Use { index: "..." }`,
+    );
+  }
+  const index = matching[0]!;
+  const foreignKey = info.indexFirstField(targetTable, index)!;
   return {
-    one: buildOneProxy(sourceTable, info),
-    many: buildManyProxy(sourceTable, info),
+    type: "many",
+    targetTable,
+    index,
+    foreignKey,
+    ...(onDelete != null ? { onDelete } : {}),
   };
 }
+
+function resolveThrough(
+  info: SchemaIntrospection,
+  sourceTable: string,
+  targetTable: string,
+  opts: Record<string, unknown>,
+): ThroughDescriptor {
+  const joinTable = opts.through as string;
+  const explicitIndex = opts.index as string | undefined;
+  const onDelete = opts.onDelete as OnDeleteAction | undefined;
+  const joinIdFields = info.idFields(joinTable);
+
+  // Same-table through — explicit index disambiguates source vs target
+  if (sourceTable === targetTable) {
+    if (!explicitIndex) {
+      throw new Error(
+        `[defineRelations] ${sourceTable} → many.${targetTable}({ through: "${joinTable}" }): same-table through requires { index: "..." } to disambiguate source vs target field`,
+      );
+    }
+    const sourceField = info.indexFirstField(joinTable, explicitIndex);
+    if (!sourceField) {
+      throw new Error(
+        `[defineRelations] ${sourceTable} → many.${targetTable}({ through: "${joinTable}", index: "${explicitIndex}" }): index not found on join table`,
+      );
+    }
+    const targetField = [...joinIdFields.entries()].find(
+      ([field, fieldInfo]) => fieldInfo.tableName === targetTable && field !== sourceField,
+    )?.[0];
+    if (!targetField) {
+      throw new Error(
+        `[defineRelations] ${sourceTable} → many.${targetTable}({ through: "${joinTable}" }): could not find second v.id("${targetTable}") field on join table`,
+      );
+    }
+    return {
+      type: "through",
+      targetTable,
+      joinTable,
+      sourceField,
+      targetField,
+      index: explicitIndex,
+      ...(onDelete != null ? { onDelete } : {}),
+    };
+  }
+
+  // Different-table through — auto-resolve source/target fields
+  const entries = [...joinIdFields.entries()];
+  const sourceField = entries.find(([, info]) => info.tableName === sourceTable)?.[0];
+  const targetField = entries.find(([, info]) => info.tableName === targetTable)?.[0];
+  if (!sourceField) {
+    throw new Error(
+      `[defineRelations] ${sourceTable} → many.${targetTable}({ through: "${joinTable}" }): join table has no v.id("${sourceTable}") field`,
+    );
+  }
+  if (!targetField) {
+    throw new Error(
+      `[defineRelations] ${sourceTable} → many.${targetTable}({ through: "${joinTable}" }): join table has no v.id("${targetTable}") field`,
+    );
+  }
+  const index = explicitIndex ?? info.indexByFirstField(joinTable, sourceField);
+  if (!index) {
+    throw new Error(
+      `[defineRelations] ${sourceTable} → many.${targetTable}({ through: "${joinTable}" }): no index on join table starts with "${sourceField}"`,
+    );
+  }
+  return {
+    type: "through",
+    targetTable,
+    joinTable,
+    sourceField,
+    targetField,
+    index,
+    ...(onDelete != null ? { onDelete } : {}),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// defineRelations
+// ---------------------------------------------------------------------------
 
 export function defineRelations<
   Schema extends GenericSchema,
@@ -281,20 +331,31 @@ export function defineRelations<
 >(
   schema: SchemaDefinition<Schema, StrictTableTypes>,
   config: Config,
-): ResolvedRelations<Config> {
-  const info = introspect(schema);
-  const result: Record<string, Record<string, unknown>> = {};
+): ResolvedRelations<Config> & { readonly [ZEN_SCHEMA]: SchemaDefinition<Schema, StrictTableTypes> } {
+  const tables = schema.tables as Record<string, unknown>;
+  const info = introspect(tables as Parameters<typeof introspect>[0]);
 
-  for (const [tableName, callback] of Object.entries(config)) {
-    if (!info.tableNames.has(tableName)) {
-      throw new Error(
-        `[defineRelations] table "${tableName}" does not exist in schema`,
-      );
-    }
-    if (typeof callback === "function") {
-      result[tableName] = callback(buildRBuilder(tableName, info) as any);
-    }
-  }
+  // CAST Kind 1 — Proxy erases mapped types at the value level. The runtime proxy
+  // intercepts all property access and returns correctly-typed descriptors.
+  // The RBuilder<Schema, TN> type is enforced by the Config constraint.
+  // Tested: tests/relations/defineRelations.test.ts
+  const result = Object.fromEntries(
+    Object.entries(config)
+      .filter((entry): entry is [string, Function] => typeof entry[1] === "function")
+      .map(([tableName, callback]) => {
+        const r = {
+          one: buildOneProxy(tableName, info),
+          many: buildManyProxy(tableName, info),
+        } as unknown as RBuilder<Schema, keyof Schema & string>;
+        return [tableName, callback(r) as Record<string, RelationDescriptor>];
+      }),
+  );
 
-  return result as ResolvedRelations<Config>;
+  // Embed schema reference for createZen to read
+  (result as any)[ZEN_SCHEMA] = schema;
+
+  // CAST Kind 1 — result is Record<string, ...> but return type preserves exact callback shapes.
+  // Now intersected with { [ZEN_SCHEMA]: SchemaDefinition }.
+  // Tested: tests/relations/defineRelations.test.ts
+  return result as ResolvedRelations<Config> & { readonly [ZEN_SCHEMA]: SchemaDefinition<Schema, StrictTableTypes> };
 }
