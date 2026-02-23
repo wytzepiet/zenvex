@@ -1,0 +1,92 @@
+---
+title: "r.many"
+description: One-to-many relations via indexes on the target table.
+---
+
+`r.many` defines a one-to-many relation. It uses an index on the target table whose first field is a `v.id()` pointing back to the source table.
+
+## Syntax
+
+```typescript
+r.many.<targetTable>()
+r.many.<targetTable>({ index: "<indexName>" })
+r.many.<targetTable>({ onDelete: "<action>" })
+```
+
+## Auto-resolved indexes
+
+When the target table has exactly one index whose first field is `v.id("<sourceTable>")`, Zenvex resolves it automatically:
+
+```typescript title="Schema"
+posts: defineTable({
+  body: v.string(),
+  threadId: v.id("threads"),
+}).index("byThread", ["threadId"])
+```
+
+```typescript title="Relations"
+threads: (r) => ({
+  posts: r.many.posts(), // auto-resolves to "byThread" index
+})
+```
+
+## Explicit index
+
+When there are multiple indexes that could match (or for clarity), specify the index explicitly:
+
+```typescript title="Schema"
+threads: defineTable({
+  title: v.string(),
+  categoryId: v.id("categories"),
+  authorId: v.id("users"),
+})
+  .index("byCategory", ["categoryId"])
+  .index("byAuthor", ["authorId"])
+```
+
+```typescript title="Relations"
+users: (r) => ({
+  threads: r.many.threads({ index: "byAuthor" }),
+})
+```
+
+## Self-referential relations
+
+`r.many` works for self-referential relations too:
+
+```typescript title="Schema"
+posts: defineTable({
+  body: v.string(),
+  parentId: v.optional(v.id("posts")),
+}).index("byParent", ["parentId"])
+```
+
+```typescript title="Relations"
+posts: (r) => ({
+  parent: r.one.posts("parentId"),
+  replies: r.many.posts({ index: "byParent", onDelete: "setNull" }),
+})
+```
+
+## Usage with `with`
+
+`r.many` relations return arrays. You can apply `filter`, `order`, `take`, and nested `with` specs:
+
+```typescript
+const thread = await zen.threads.find(threadId, {
+  with: {
+    posts: {
+      filter: (p) => !p.parentId, // top-level posts only
+      order: "asc",
+      take: 20,
+      with: { author: true },
+    },
+  },
+});
+
+thread.posts // Post[] with nested author
+```
+
+## Delete behavior
+
+See [onDelete](/docs/relations/on-delete) for configuring what happens when the source document is deleted.

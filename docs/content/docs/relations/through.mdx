@@ -1,0 +1,94 @@
+---
+title: "r.many.through"
+description: Many-to-many relations via join tables.
+---
+
+`r.many.through` defines a many-to-many relation using a join table. Zenvex auto-resolves the source/target fields and indexes from the join table schema.
+
+## Syntax
+
+```typescript
+r.many.<targetTable>({ through: "<joinTable>" })
+r.many.<targetTable>({ through: "<joinTable>", index: "<indexName>" })
+```
+
+## Basic usage
+
+```typescript title="Schema"
+import { defineJoinTable } from "zenvex";
+
+const schema = defineSchema({
+  threads: defineTable({ title: v.string() }),
+  tags: defineTable({ name: v.string() }),
+  threadTags: defineJoinTable("threads", "tags"),
+});
+```
+
+```typescript title="Relations"
+threads: (r) => ({
+  tags: r.many.tags({ through: "threadTags" }),
+}),
+tags: (r) => ({
+  threads: r.many.threads({ through: "threadTags" }),
+})
+```
+
+## Pivot data
+
+If the join table has extra fields, they appear under `pivot` at query time:
+
+```typescript title="Schema"
+threadTags: defineJoinTable("threads", "tags", {
+  order: v.number(), // extra field
+})
+```
+
+```typescript title="Query"
+const thread = await zen.threads.find(threadId, {
+  with: { tags: true },
+});
+
+thread.tags[0].name        // from the tag document
+thread.tags[0].pivot.order // from the join row
+```
+
+## Self-referential many-to-many
+
+For same-table joins (like followers), `defineJoinTable` won't work because field names would collide. Define the join table manually and use the `index` option to disambiguate:
+
+```typescript title="Schema"
+userFollows: defineTable({
+  followerId: v.id("users"),
+  followeeId: v.id("users"),
+  followedAt: v.number(),
+})
+  .index("byFollower", ["followerId"])
+  .index("byFollowee", ["followeeId"])
+```
+
+```typescript title="Relations"
+users: (r) => ({
+  followers: r.many.users({ through: "userFollows", index: "byFollowee" }),
+  following: r.many.users({ through: "userFollows", index: "byFollower" }),
+})
+```
+
+The `index` tells Zenvex which join table field to use as the source lookup. `byFollowee` means "look up rows where the current user is the followee" — giving you their followers.
+
+```typescript title="Query"
+const user = await zen.users.find(userId, {
+  with: { followers: true, following: true },
+});
+
+user.followers[0].name            // follower's name
+user.followers[0].pivot.followedAt // from the join row
+```
+
+## Delete behavior
+
+For `through` relations:
+
+- **Default** (no `onDelete`): Join rows are cleaned up, target documents are untouched.
+- **`cascade`**: Target documents are deleted, then join rows are cleaned up.
+- **`restrict`**: Throws if join rows exist.
+- **`noAction`**: Skips entirely — join rows are left in place.

@@ -1,0 +1,52 @@
+---
+title: Index Queries
+description: Use the table proxy to query by index with positional arguments.
+---
+
+The `zen` proxy exposes your table indexes as methods. Positional arguments map to the index fields in order.
+
+## Table proxy
+
+```typescript
+// Full table scan — no index
+await zen.users.findMany()
+
+// By index — positional args match index field order
+await zen.posts.byAuthor(userId).findMany()
+await zen.posts.byThread(threadId).findMany({ order: "desc" })
+```
+
+## Multi-field indexes
+
+For indexes with multiple fields, pass each equality field as a positional argument. The last field can optionally use a [range marker](/docs/querying/range).
+
+```typescript title="Schema"
+threads: defineTable({
+  title: v.string(),
+  categoryId: v.id("categories"),
+  createdAt: v.number(),
+}).index("byCategoryCreatedAt", ["categoryId", "createdAt"])
+```
+
+```typescript title="Query"
+// Equality on first field only
+await zen.threads.byCategoryCreatedAt(categoryId).findMany()
+
+// Equality on first field, range on second
+await zen.threads
+  .byCategoryCreatedAt(categoryId, q.gte(startTime))
+  .findMany({ order: "desc" })
+```
+
+## Chaining
+
+Index methods return a query builder. Call `.findMany()`, `.findFirst()`, or `.find()` to execute.
+
+```typescript
+const builder = zen.threads.byCategoryCreatedAt(categoryId);
+
+// These are all valid
+await builder.findMany({ take: 10 });
+await builder.findFirst();
+await builder.findMany({ order: "desc", with: { author: true } });
+```

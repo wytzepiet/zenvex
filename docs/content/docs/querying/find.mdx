@@ -1,0 +1,46 @@
+---
+title: find, findMany, findFirst
+description: The core read methods for fetching documents.
+---
+
+## find
+
+Fetch a single document by ID. Returns the document or throws if not found.
+
+```typescript
+const post = await zen.posts.find(postId);
+
+const post = await zen.posts.find(postId, {
+  with: { author: true },
+  select: ["_id", "title"],
+});
+```
+
+## findMany
+
+Fetch multiple documents. Returns `Doc[]` by default, or a `PaginationResult` when [`cursor`](/docs/querying/pagination) is present.
+
+```typescript
+// All users
+const users = await zen.users.findMany();
+
+// With options
+const posts = await zen.posts.byAuthor(userId).findMany({
+  filter: (post) => post.body.length > 100,
+  order: "desc",
+  take: 10,
+  with: { author: true },
+});
+```
+
+Without an index scope, `findMany` performs a full table scan.
+
+## findFirst
+
+Like `findMany` but returns the first match or `null`.
+
+```typescript
+const user = await zen.users.byEmail("alice@example.com").findFirst();
+```
+
+`findFirst` accepts all the same options as `findMany` except `cursor`.

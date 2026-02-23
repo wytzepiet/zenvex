@@ -1,0 +1,53 @@
+---
+title: Computed Fields
+description: Augment documents with derived data using add callbacks.
+---
+
+The `add` option lets you augment documents with computed fields. The callback receives the document with all loaded relations, so you can derive values from related data.
+
+## Basic usage
+
+```typescript
+const categories = await zen.categories.findMany({
+  with: { threads: true },
+  add: (category) => ({
+    threadCount: category.threads.length,
+  }),
+});
+
+// categories[0].name        — from the document
+// categories[0].threads     — loaded relation
+// categories[0].threadCount — computed field (number)
+```
+
+## With nested relations
+
+Since `add` runs after relations are loaded, you can compute across nested data:
+
+```typescript
+const threads = await zen.threads.findMany({
+  with: {
+    posts: { with: { author: true } },
+  },
+  add: (thread) => ({
+    postCount: thread.posts.length,
+    uniqueAuthors: [...new Set(thread.posts.map((p) => p.author.name))],
+  }),
+});
+```
+
+## Type inference
+
+The return type of `add` is merged into the document type. Computed field names that don't conflict with existing fields are fully typed:
+
+```typescript
+const posts = await zen.posts.findMany({
+  add: (post) => ({
+    preview: post.body.slice(0, 200),
+    wordCount: post.body.split(" ").length,
+  }),
+});
+
+posts[0].preview   // string
+posts[0].wordCount // number
+```

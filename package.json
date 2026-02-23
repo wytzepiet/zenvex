@@ -1,7 +1,8 @@
 {
   "workspaces": [
     "packages/*",
-    "examples/*"
+    "examples/*",
+    "docs"
   ],
   "overrides": {
     "@types/node": "^25.2.3"

@@ -1,0 +1,61 @@
+---
+title: Type Helpers
+description: Export Zen, ZenReader, and ZenWriter types for use across your codebase.
+---
+
+Zenvex exports a `Zen` type that you can use to type the `zen` object in your custom functions and utilities.
+
+## Zen type
+
+The `Zen` type takes three parameters: the Convex context type, your schema, and your relations.
+
+```typescript title="convex/zen.ts"
+import type { Zen } from "zenvex";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
+import schema, { relations } from "./schema";
+
+export type ZenReader = Zen<QueryCtx, typeof schema, typeof relations>;
+export type ZenWriter = Zen<MutationCtx, typeof schema, typeof relations>;
+```
+
+## ZenReader vs ZenWriter
+
+| Type | Context | Read | Write |
+|------|---------|------|-------|
+| `ZenReader` | `QueryCtx` | `find`, `findMany`, `findFirst` | — |
+| `ZenWriter` | `MutationCtx` | `find`, `findMany`, `findFirst` | `insert`, `patch`, `delete`, `upsert` |
+
+Use `ZenReader` in query functions and `ZenWriter` in mutation functions.
+
+## Usage in helper functions
+
+Export these types to use `zen` in helper functions outside of your Convex function handlers:
+
+```typescript title="convex/helpers.ts"
+import type { ZenReader } from "./zen";
+
+export async function getThreadWithDetails(zen: ZenReader, threadId: Id<"threads">) {
+  return zen.threads.find(threadId, {
+    with: {
+      author: true,
+      posts: {
+        order: "asc",
+        with: { author: true },
+      },
+      tags: true,
+    },
+  });
+}
+```
+
+```typescript title="convex/queries.ts"
+import { query } from "./functions";
+import { getThreadWithDetails } from "./helpers";
+
+export const getThread = query({
+  args: { id: v.id("threads") },
+  handler: async ({ zen }, { id }) => {
+    return getThreadWithDetails(zen, id);
+  },
+});
+```

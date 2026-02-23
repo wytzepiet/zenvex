@@ -1,0 +1,71 @@
+---
+title: Cursor Pagination
+description: Paginate results using cursor-based pagination.
+---
+
+When `cursor` is present in `findMany` options (even `null` for the first page), the return type switches from `Doc[]` to `PaginationResult<Doc>`.
+
+## Basic usage
+
+```typescript
+// First page — pass null
+const firstPage = await zen.posts.findMany({
+  take: 20,
+  cursor: null,
+});
+
+// firstPage.page           — Doc[]
+// firstPage.isDone         — boolean
+// firstPage.continueCursor — string
+
+// Next page — pass the cursor from the previous result
+const nextPage = await zen.posts.findMany({
+  take: 20,
+  cursor: firstPage.continueCursor,
+});
+```
+
+## Return type
+
+The return type changes based on whether `cursor` is present:
+
+```typescript
+// No cursor — returns Doc[]
+const posts: Post[] = await zen.posts.findMany({ take: 10 });
+
+// With cursor — returns PaginationResult<Doc>
+const result = await zen.posts.findMany({ take: 10, cursor: null });
+// result.page: Post[]
+// result.isDone: boolean
+// result.continueCursor: string
+```
+
+## With other options
+
+Pagination works with all other query options:
+
+```typescript
+const page = await zen.posts.byAuthor(userId).findMany({
+  take: 10,
+  cursor: prevCursor,
+  order: "desc",
+  with: { author: true },
+  filter: (post) => post.body.length > 100,
+});
+```
+
+## In a Convex query
+
+```typescript title="convex/queries.ts"
+export const listPosts = query({
+  args: { cursor: v.union(v.string(), v.null()) },
+  handler: async ({ zen }, { cursor }) => {
+    return zen.posts.findMany({
+      with: { author: true },
+      order: "desc",
+      take: 20,
+      cursor,
+    });
+  },
+});
+```

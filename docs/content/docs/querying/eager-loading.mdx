@@ -1,0 +1,81 @@
+---
+title: Eager Loading
+description: Load related documents with nested with specs.
+---
+
+The `with` option in query methods lets you eager load relations defined in `defineRelations`. Relations can be nested arbitrarily deep.
+
+## Basic usage
+
+Pass `true` to load a relation with default settings:
+
+```typescript
+const post = await zen.posts.find(postId, {
+  with: { author: true, tags: true },
+});
+
+post.author.name       // resolved user document
+post.tags[0].name      // resolved tag documents
+post.tags[0].pivot.order // pivot data from join table
+```
+
+## Nested loading
+
+Load relations of relations by passing a spec object instead of `true`:
+
+```typescript
+const thread = await zen.threads.find(threadId, {
+  with: {
+    author: true,
+    category: true,
+    posts: {
+      with: {
+        author: true,
+        replies: {
+          take: 5,
+          with: { author: true },
+        },
+      },
+    },
+    tags: true,
+  },
+});
+
+thread.posts[0].author.name           // post author
+thread.posts[0].replies[0].author.name // reply author
+```
+
+## Per-relation options
+
+When passing a spec object, you can apply `filter`, `order`, `take`, `select`, and `omit` to that specific relation:
+
+```typescript
+const thread = await zen.threads.find(threadId, {
+  with: {
+    posts: {
+      filter: (p) => !p.parentId,  // top-level posts only
+      order: "asc",
+      take: 20,
+      select: ["_id", "body"],
+      with: { author: true },
+    },
+  },
+});
+```
+
+These options only apply to `r.many` and `r.many.through` relations. `r.one` relations always resolve to a single document, so they don't support filtering or ordering.
+
+## Type safety
+
+The `with` spec is fully typed. You'll get autocomplete on available relation names and type errors if you reference a relation that doesn't exist:
+
+```typescript
+const post = await zen.posts.find(postId, {
+  with: {
+    author: true,    // valid — defined in relations
+    comments: true,  // type error — no such relation on posts
+  },
+});
+```
+
+The result type reflects exactly what you loaded — `post.author` is typed as a full user document, not optional.

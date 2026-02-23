@@ -1,0 +1,63 @@
+---
+title: "r.one"
+description: Many-to-one relations via foreign key fields.
+---
+
+`r.one` defines a many-to-one relation via a foreign key field on the current table. At query time, it resolves to `ctx.db.get(doc.fkField)`.
+
+## Syntax
+
+```typescript
+r.one.<targetTable>("<fkField>")
+```
+
+## Examples
+
+```typescript
+posts: (r) => ({
+  // Required FK — always resolves to a user document
+  author: r.one.users("authorId"),
+
+  // Optional FK — resolves to a post or null
+  parent: r.one.posts("parentId"),
+})
+```
+
+The `r.one` proxy autocompletes target table names. The FK field argument autocompletes to fields on the current table that are `v.id("<targetTable>")`.
+
+## Optional foreign keys
+
+If the FK field is defined as `v.optional(v.id("..."))` in your schema, the resolved relation will be `Doc | null`. Zenvex infers this from your schema — no extra configuration needed.
+
+```typescript title="Schema"
+posts: defineTable({
+  body: v.string(),
+  parentId: v.optional(v.id("posts")), // optional self-reference
+})
+```
+
+```typescript title="Relations"
+posts: (r) => ({
+  parent: r.one.posts("parentId"), // type: Post | null
+})
+```
+
+```typescript title="Query"
+const post = await zen.posts.find(postId, {
+  with: { parent: true },
+});
+
+post.parent // Post | null
+```
+
+## Usage with `with`
+
+```typescript
+const post = await zen.posts.find(postId, {
+  with: { author: true },
+});
+
+post.author.name // string — fully typed
+```
+
+`r.one` relations always resolve to a single document (or `null` for optional FKs), so they don't support `filter`, `order`, or `take` in the `with` spec.

@@ -1,0 +1,39 @@
+---
+title: Introduction
+description: Type-safe relations, cascading deletes, and ergonomic index queries for Convex.
+---
+
+Zenvex adds a relation system, cascading deletes, and ergonomic index queries to [Convex](https://convex.dev). No codegen — all types are inferred via generics and proxies.
+
+```typescript
+const thread = await zen.threads.find(threadId, {
+  with: {
+    author: true,
+    posts: { with: { author: true }, order: "desc", take: 10 },
+    tags: true,
+  },
+});
+
+// Fully typed — thread.author.name, thread.posts[0].author.email
+```
+
+## Features
+
+- **Relations** — `r.one`, `r.many`, `r.many.through` with full autocomplete on table names, fields, and indexes
+- **Cascading deletes** — `"cascade"`, `"restrict"`, `"setNull"`, `"noAction"` per relation
+- **Index queries** — Positional args map to index fields with range support
+- **Eager loading** — Nested `with` specs with per-relation `filter`, `order`, `take`, `select`/`omit`
+- **Cursor pagination** — Add `cursor` to `findMany` to switch from `Doc[]` to `PaginationResult`
+- **Computed fields** — `add` callbacks augment docs with derived data
+- **Write operations** — `insert`, `patch`, `delete`, `upsert` with full type safety
+- **Join tables** — `defineJoinTable` helper with auto-generated fields and indexes
+- **Zero codegen** — Types flow from your Convex schema through generics and proxies
+
+## Next steps
+
+<Cards>
+  <Card title="Why Zenvex?" href="/docs/why-zenvex" description="See how Zenvex compares to vanilla Convex" />
+  <Card title="Getting Started" href="/docs/getting-started" description="Install, setup, and your first query" />
+  <Card title="Relations" href="/docs/relations" description="Define relations between your tables" />
+  <Card title="Querying" href="/docs/querying" description="Find, filter, paginate, and eager load" />
+</Cards>

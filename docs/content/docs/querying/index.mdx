@@ -1,0 +1,42 @@
+---
+title: Querying Overview
+description: Read data with find, findMany, findFirst, and the table proxy.
+---
+
+Zenvex provides a fluent, type-safe query API through the `zen` proxy. Access any table directly on `zen`, optionally scope to an index, then call a read method.
+
+```typescript
+// Table scan
+const users = await zen.users.findMany();
+
+// Index query
+const posts = await zen.posts.byAuthor(userId).findMany();
+
+// Single document
+const post = await zen.posts.find(postId, { with: { author: true } });
+```
+
+## Query flow
+
+```
+zen.<table>                    // full table scan
+zen.<table>.<index>(...args)   // scoped to index
+  .find(id, opts?)             // single doc by ID
+  .findMany(opts?)             // multiple docs
+  .findFirst(opts?)            // first match or null
+```
+
+## Query options
+
+All read methods accept the same options:
+
+| Option | Type | Description |
+|--------|------|-------------|
+| [`with`](/docs/querying/eager-loading) | `WithSpec` | Eager load relations |
+| [`filter`](/docs/querying/filtering) | `(doc) => boolean` | JS predicate filter |
+| [`order`](/docs/querying/filtering) | `"asc" \| "desc"` | Sort order |
+| [`take`](/docs/querying/filtering) | `number` | Limit results |
+| [`select`](/docs/querying/select-omit) | `string[]` | Include only these fields |
+| [`omit`](/docs/querying/select-omit) | `string[]` | Exclude these fields |
+| [`add`](/docs/querying/computed-fields) | `(doc) => object` | Computed fields |
+| [`cursor`](/docs/querying/pagination) | `string \| null` | Cursor pagination |

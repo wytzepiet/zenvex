@@ -1,0 +1,139 @@
+---
+title: Getting Started
+description: Install Zenvex, define relations, and run your first query.
+---
+
+## Install
+
+```bash
+npm install zenvex
+# peer dependency
+npm install convex
+```
+
+Zenvex also depends on `convex-helpers` — it will be installed automatically as a dependency.
+
+## 1. Define your schema and relations
+
+```typescript title="convex/schema.ts"
+import { defineSchema, defineTable } from "convex/server";
+import { v } from "convex/values";
+import { defineJoinTable, defineRelations } from "zenvex";
+
+const schema = defineSchema({
+  users: defineTable({
+    name: v.string(),
+    email: v.string(),
+  }).index("byEmail", ["email"]),
+
+  posts: defineTable({
+    title: v.string(),
+    body: v.string(),
+    authorId: v.id("users"),
+  }).index("byAuthor", ["authorId"]),
+
+  tags: defineTable({ name: v.string() }),
+
+  postTags: defineJoinTable("posts", "tags"),
+});
+
+export default schema;
+
+export const relations = defineRelations(schema, {
+  users: (r) => ({
+    posts: r.many.posts({ onDelete: "cascade" }),
+  }),
+  posts: (r) => ({
+    author: r.one.users("authorId"),
+    tags: r.many.tags({ through: "postTags" }),
+  }),
+  tags: (r) => ({
+    posts: r.many.posts({ through: "postTags" }),
+  }),
+});
+```
+
+<Callout type="info">
+You don't need to define relations for every table — only the ones you want to use `with`, cascading deletes, or through-relations on.
+</Callout>
+
+## 2. Create custom functions with `zen` in context
+
+Use `convex-helpers` custom functions to inject `zen` into your function context:
+
+```typescript title="convex/functions.ts"
+import {
+  customQuery,
+  customMutation,
+  customCtx,
+} from "convex-helpers/server/customFunctions";
+import {
+  query as baseQuery,
+  mutation as baseMutation,
+} from "./_generated/server";
+import { createZen } from "zenvex";
+import { relations } from "./schema";
+
+export const query = customQuery(
+  baseQuery,
+  customCtx(async (ctx) => ({
+    zen: createZen(ctx, relations),
+  })),
+);
+
+export const mutation = customMutation(
+  baseMutation,
+  customCtx(async (ctx) => ({
+    zen: createZen(ctx, relations),
+  })),
+);
+```
+
+## 3. Use `zen` in your functions
+
+```typescript title="convex/queries.ts"
+import { v } from "convex/values";
+import { query } from "./functions";
+
+export const getPost = query({
+  args: { id: v.id("posts") },
+  handler: async ({ zen }, { id }) => {
+    return zen.posts.find(id, {
+      with: { author: true, tags: true },
+    });
+  },
+});
+
+export const listPosts = query({
+  args: { cursor: v.union(v.string(), v.null()) },
+  handler: async ({ zen }, { cursor }) => {
+    return zen.posts.findMany({
+      with: { author: true },
+      order: "desc",
+      take: 20,
+      cursor,
+    });
+  },
+});
+```
+
+```typescript title="convex/mutations.ts"
+import { v } from "convex/values";
+import { mutation } from "./functions";
+
+export const createPost = mutation({
+  args: { title: v.string(), body: v.string(), authorId: v.id("users") },
+  handler: async ({ zen }, args) => {
+    return zen.posts.insert(args);
+  },
+});
+
+export const deletePost = mutation({
+  args: { id: v.id("posts") },
+  handler: async ({ zen }, { id }) => {
+    await zen.posts.delete(id); // cascades per relation config
+  },
+});
+```
+
+That's it — you have type-safe relations, cascading deletes, and ergonomic queries.

@@ -1,0 +1,98 @@
+---
+title: Why Zenvex?
+description: How Zenvex improves the Convex developer experience with relations, cascading deletes, and ergonomic queries.
+---
+
+Convex is a powerful reactive backend, but as your app grows you'll find yourself writing a lot of boilerplate to manage relationships between tables. Zenvex eliminates that boilerplate while keeping everything type-safe.
+
+## Loading related data
+
+Convex has no built-in relation system. Loading a thread with its author and posts requires manual `db.get()` calls and index queries:
+
+```typescript title="Vanilla Convex"
+const thread = await ctx.db.get(threadId);
+const author = await ctx.db.get(thread.authorId);
+const posts = await ctx.db
+  .query("posts")
+  .withIndex("byThread", (q) => q.eq("threadId", threadId))
+  .collect();
+const postsWithAuthors = await Promise.all(
+  posts.map(async (post) => ({
+    ...post,
+    author: await ctx.db.get(post.authorId),
+  }))
+);
+```
+
+With Zenvex, you declare what you want and it handles the rest:
+
+```typescript title="Zenvex"
+const thread = await zen.threads.find(threadId, {
+  with: {
+    author: true,
+    posts: { with: { author: true } },
+  },
+});
+```
+
+The result is fully typed — `thread.author.name`, `thread.posts[0].author.email` all have autocomplete.
+
+## Cascading deletes
+
+Deleting a thread in vanilla Convex means manually finding and deleting every related document. Miss one and you have orphaned data:
+
+```typescript title="Vanilla Convex"
+const posts = await ctx.db
+  .query("posts")
+  .withIndex("byThread", (q) => q.eq("threadId", threadId))
+  .collect();
+for (const post of posts) {
+  await ctx.db.delete(post._id);
+}
+const joinRows = await ctx.db
+  .query("threadTags")
+  .withIndex("byThreadsId", (q) => q.eq("threadsId", threadId))
+  .collect();
+for (const row of joinRows) {
+  await ctx.db.delete(row._id);
+}
+await ctx.db.delete(threadId);
+```
+
+With Zenvex, delete behavior is defined once in your relations config and applied automatically:
+
+```typescript title="Zenvex"
+await zen.threads.delete(threadId);
+// posts cascade-deleted, join rows cleaned up — defined in relations config
+```
+
+## Index queries
+
+Convex index queries require remembering index names and using a builder callback:
+
+```typescript title="Vanilla Convex"
+const threads = await ctx.db
+  .query("threads")
+  .withIndex("byCategoryCreatedAt", (q) =>
+    q.eq("categoryId", categoryId).gte("createdAt", startTime)
+  )
+  .order("desc")
+  .take(10);
+```
+
+Zenvex maps positional arguments to index fields:
+
+```typescript title="Zenvex"
+const threads = await zen.threads
+  .byCategoryCreatedAt(categoryId, q.gte(startTime))
+  .findMany({ order: "desc", take: 10 });
+```
+
+## What Zenvex doesn't do
+
+Zenvex is intentionally focused. It doesn't add:
+
+- Custom filter/where syntax — use JS predicates via `filter`
+- SQL-like joins or aggregations — Convex doesn't support them at the engine level
+- Client-side extensions or middleware
+- Code generation — everything is inferred at the type level

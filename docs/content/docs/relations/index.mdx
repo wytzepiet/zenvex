@@ -1,0 +1,35 @@
+---
+title: Relations Overview
+description: Define type-safe relations between your Convex tables.
+---
+
+Relations are defined alongside your schema using `defineRelations`. Each table gets a callback with a typed `r` builder that provides autocomplete on table names, foreign key fields, and index names.
+
+```typescript title="convex/schema.ts"
+import { defineRelations } from "zenvex";
+
+export const relations = defineRelations(schema, {
+  posts: (r) => ({
+    author: r.one.users("authorId"),
+    comments: r.many.comments({ onDelete: "cascade" }),
+  }),
+  users: (r) => ({
+    posts: r.many.posts({ onDelete: "cascade" }),
+    groups: r.many.groups({ through: "userGroups" }),
+  }),
+});
+```
+
+## Relation types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| [`r.one`](/docs/relations/one) | Many-to-one via FK field | `r.one.users("authorId")` |
+| [`r.many`](/docs/relations/many) | One-to-many via index | `r.many.posts({ onDelete: "cascade" })` |
+| [`r.many.through`](/docs/relations/through) | Many-to-many via join table | `r.many.tags({ through: "postTags" })` |
+
+## How it works
+
+Relation descriptors are plain data objects (`OneDescriptor`, `ManyDescriptor`, `ThroughDescriptor`). They describe _what_ to resolve, not _how_. Resolution happens at query time when you use `with` in a `find` or `findMany` call.
+
+The `r` builder proxies are schema-aware — they validate table names, field types, and index shapes at call time and at the type level.

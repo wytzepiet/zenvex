@@ -1,0 +1,57 @@
+---
+title: filter, order, take
+description: Filter results with JS predicates, control sort order, and limit results.
+---
+
+## filter
+
+Apply a JavaScript predicate to filter results. Uses `convex-helpers` under the hood.
+
+```typescript
+await zen.posts.byThread(threadId).findMany({
+  filter: (post) => !post.parentId, // top-level posts only
+});
+
+await zen.users.findMany({
+  filter: (user) => user.email.endsWith("@company.com"),
+});
+```
+
+<Callout type="warn">
+Filters run after the index query, so they don't reduce the amount of data read from the database. Use index queries for efficient filtering and JS `filter` for additional refinement.
+</Callout>
+
+## order
+
+Set the sort order. Defaults to `"asc"`.
+
+```typescript
+await zen.posts.byThread(threadId).findMany({
+  order: "desc", // newest first
+});
+```
+
+Order applies to the index scan direction in Convex.
+
+## take
+
+Limit the number of results returned.
+
+```typescript
+await zen.posts.byAuthor(userId).findMany({
+  take: 10,
+});
+```
+
+## Combining options
+
+All options can be combined freely:
+
+```typescript
+await zen.posts.byThread(threadId).findMany({
+  filter: (post) => post.body.length > 50,
+  order: "desc",
+  take: 20,
+  with: { author: true },
+});
+```

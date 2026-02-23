@@ -1,0 +1,15 @@
+{
+  "title": "Docs",
+  "pages": [
+    "---Introduction---",
+    "index",
+    "why-zenvex",
+    "getting-started",
+    "---Guides---",
+    "...relations",
+    "...querying",
+    "...writing",
+    "...schema",
+    "...typescript"
+  ]
+}

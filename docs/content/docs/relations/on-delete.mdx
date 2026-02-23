@@ -1,0 +1,59 @@
+---
+title: onDelete
+description: Configure cascading delete behavior per relation.
+---
+
+The `onDelete` option controls what happens to related documents when the source document is deleted via `zen.<table>.delete()`.
+
+## Actions
+
+| Action | Behavior |
+|--------|----------|
+| `"restrict"` | Throws if related documents exist **(default)** |
+| `"cascade"` | Deletes all related documents recursively |
+| `"setNull"` | Sets the FK field to `undefined` on related documents |
+| `"noAction"` | Skips — no enforcement, no cleanup |
+
+## Examples
+
+```typescript
+users: (r) => ({
+  // Deleting a user cascades to their threads and posts
+  threads: r.many.threads({ index: "byAuthor", onDelete: "cascade" }),
+  posts: r.many.posts({ index: "byAuthor", onDelete: "cascade" }),
+}),
+
+posts: (r) => ({
+  // Deleting a post sets parentId to undefined on replies
+  replies: r.many.posts({ index: "byParent", onDelete: "setNull" }),
+}),
+
+categories: (r) => ({
+  // Can't delete a category that has threads
+  threads: r.many.threads({ index: "byCategory" }), // default: restrict
+})
+```
+
+## Cascade chains
+
+Cascades are recursive. If deleting a user cascades to their threads, and each thread cascades to its posts, all three levels are cleaned up in one `zen.users.delete(userId)` call.
+
+## Through relations
+
+For `through` relations, delete behavior depends on `onDelete`:
+
+- **Default** (no `onDelete`): Join rows are cleaned up, target documents are untouched.
+- **`cascade`**: Target documents are deleted, then join rows are cleaned up.
+- **`restrict`**: Throws if join rows exist (nothing is deleted).
+- **`noAction`**: Skips entirely — join rows are left orphaned.
+
+```typescript
+threads: (r) => ({
+  // Deleting a thread cleans up threadTags rows, but tags are untouched
+  tags: r.many.tags({ through: "threadTags" }),
+})
+```
+
+## setNull requirements
+
+`"setNull"` only works when the FK field is optional (`v.optional(v.id("..."))`) in your schema. Zenvex validates this at the type level — you'll get a type error if you try to use `"setNull"` on a required FK.

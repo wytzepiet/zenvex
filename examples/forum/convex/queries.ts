@@ -15,13 +15,7 @@ export const listCategoriesWithRecentThreads = query({
   args: {},
   handler: async ({ zen }) => {
     return zen.categories.findMany({
-      with: {
-        threads: {
-          take: 3,
-          order: "desc",
-          select: ["_id", "title", "createdAt"],
-        },
-      },
+      with: { threads: { take: 3, order: "desc" } },
     });
   },
 });
@@ -65,12 +59,9 @@ export const listPosts = query({
   },
   handler: async ({ zen }, { threadId, cursor }) => {
     return zen.posts.byThread(threadId).findMany({
+      with: { author: true, replies: { with: { author: true } } },
       take: 3,
       cursor,
-      with: {
-        author: true,
-        replies: { with: { author: true } },
-      },
     });
   },
 });

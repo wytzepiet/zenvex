@@ -1,0 +1,85 @@
+---
+title: Write Operations
+description: Insert, patch, upsert, and delete documents with cascading behavior.
+---
+
+Write methods are available when `createZen` receives a `MutationCtx`. They provide type-safe mutations with automatic cascading delete support.
+
+## insert
+
+Create a new document. Returns the new document's ID.
+
+```typescript
+const userId = await zen.users.insert({
+  name: "Alice",
+  email: "alice@example.com",
+});
+```
+
+The argument is typed to match your schema — you'll get type errors for missing required fields or wrong types.
+
+## patch
+
+Update fields on an existing document. Only the specified fields are changed.
+
+```typescript
+await zen.users.patch(userId, {
+  name: "Alice Updated",
+});
+```
+
+## upsert
+
+Insert or update a document. Takes an existing document (or `null`) and the full document data. If the existing document is `null`, a new document is created; otherwise, the existing document is updated.
+
+```typescript
+const existingUser = await zen.users.byEmail("alice@example.com").findFirst();
+
+const userId = await zen.users.upsert(existingUser, {
+  name: "Alice",
+  email: "alice@example.com",
+});
+```
+
+<Callout type="info">
+`upsert` takes the existing document itself, not a filter. Fetch the document first, then pass it (or `null`) to `upsert`.
+</Callout>
+
+## delete
+
+Delete a document and trigger cascading deletes per your relation config.
+
+```typescript
+await zen.threads.delete(threadId);
+// Cascades to posts, cleans up threadTags join rows
+```
+
+The cascade behavior is defined in your relations — see [onDelete](/docs/relations/on-delete).
+
+## In a Convex mutation
+
+```typescript title="convex/mutations.ts"
+import { v } from "convex/values";
+import { mutation } from "./functions";
+
+export const createPost = mutation({
+  args: { title: v.string(), body: v.string(), authorId: v.id("users") },
+  handler: async ({ zen }, args) => {
+    return zen.posts.insert(args);
+  },
+});
+
+export const updatePost = mutation({
+  args: { id: v.id("posts"), title: v.optional(v.string()) },
+  handler: async ({ zen }, { id, ...fields }) => {
+    await zen.posts.patch(id, fields);
+  },
+});
+
+export const deleteThread = mutation({
+  args: { id: v.id("threads") },
+  handler: async ({ zen }, { id }) => {
+    await zen.threads.delete(id);
+  },
+});
+```

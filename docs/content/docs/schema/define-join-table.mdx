@@ -1,0 +1,75 @@
+---
+title: defineJoinTable
+description: Generate join table definitions with ID fields, indexes, and optional extra fields.
+---
+
+`defineJoinTable` generates a Convex table definition for a many-to-many join table. It creates the ID fields, indexes, and optionally accepts extra fields.
+
+## Syntax
+
+```typescript
+import { defineJoinTable } from "zenvex";
+
+defineJoinTable(tableA, tableB)
+defineJoinTable(tableA, tableB, extraFields)
+```
+
+## Basic usage
+
+```typescript title="convex/schema.ts"
+const schema = defineSchema({
+  posts: defineTable({ title: v.string() }),
+  tags: defineTable({ name: v.string() }),
+
+  postTags: defineJoinTable("posts", "tags"),
+});
+```
+
+This generates:
+
+- Fields: `postsId: v.id("posts")`, `tagsId: v.id("tags")`
+- Indexes: `byPostsId` (on `postsId`), `byTagsId` (on `tagsId`)
+
+## Extra fields
+
+Pass additional field validators as the third argument. These are accessible via `pivot` at query time:
+
+```typescript title="Schema"
+threadTags: defineJoinTable("threads", "tags", {
+  order: v.number(),
+})
+```
+
+```typescript title="Query"
+const thread = await zen.threads.find(threadId, {
+  with: { tags: true },
+});
+
+thread.tags[0].pivot.order // number — from the join row
+```
+
+## Field naming
+
+Field names follow the pattern `${tableName}Id`:
+
+| Tables | Generated fields |
+|--------|-----------------|
+| `"posts", "tags"` | `postsId`, `tagsId` |
+| `"threads", "tags"` | `threadsId`, `tagsId` |
+| `"users", "groups"` | `usersId`, `groupsId` |
+
+## Same-table joins
+
+`defineJoinTable` does **not** support same-table joins because the field names would collide (`usersId` and `usersId`). For self-referential many-to-many relations, define the join table manually:
+
+```typescript title="convex/schema.ts"
+userFollows: defineTable({
+  followerId: v.id("users"),
+  followeeId: v.id("users"),
+  followedAt: v.number(),
+})
+  .index("byFollower", ["followerId"])
+  .index("byFollowee", ["followeeId"])
+```
+
+Then use `through` with an explicit `index` to disambiguate — see [r.many.through](/docs/relations/through#self-referential-many-to-many).

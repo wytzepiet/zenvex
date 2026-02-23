@@ -1,0 +1,66 @@
+---
+title: select / omit
+description: Control which fields are included in query results.
+---
+
+## select
+
+Include only the specified fields in the result. The result type narrows to only the selected fields.
+
+```typescript
+const posts = await zen.posts.findMany({
+  select: ["_id", "title", "body"],
+});
+
+// posts[0].title    — string
+// posts[0].authorId — type error, not selected
+```
+
+`_id` and `_creationTime` are always available for selection.
+
+## omit
+
+Exclude specific fields from the result. All other fields are included.
+
+```typescript
+const posts = await zen.posts.findMany({
+  omit: ["body"],
+});
+
+// posts[0].title    — string
+// posts[0].body     — type error, omitted
+```
+
+## With relations
+
+`select` and `omit` apply to the document's own fields. Loaded relations are always included in addition to the selected fields:
+
+```typescript
+const posts = await zen.posts.findMany({
+  select: ["_id", "title"],
+  with: { author: true },
+});
+
+// posts[0].title       — string (selected)
+// posts[0].author.name — string (relation, always included)
+// posts[0].body        — type error (not selected)
+```
+
+## Nested select/omit
+
+You can also use `select` and `omit` within `with` specs to control which fields are returned from related documents:
+
+```typescript
+const thread = await zen.threads.find(threadId, {
+  with: {
+    posts: {
+      select: ["_id", "body"],
+      with: { author: { select: ["_id", "name"] } },
+    },
+  },
+});
+```
+
+<Callout type="warn">
+`select` and `omit` are mutually exclusive — you can use one or the other, not both.
+</Callout>

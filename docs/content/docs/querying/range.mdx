@@ -1,0 +1,66 @@
+---
+title: Range Queries
+description: Use q.gt, q.gte, q.lt, q.lte for range bounds on index fields.
+---
+
+The last positional argument you pass can be a range marker instead of an exact value. Everything before it must be an exact match. Import `q` from `zenvex`.
+
+```typescript
+import { q } from "zenvex";
+```
+
+## Range markers
+
+| Marker | Description |
+|--------|-------------|
+| `q.gt(value)` | Greater than |
+| `q.gte(value)` | Greater than or equal |
+| `q.lt(value)` | Less than |
+| `q.lte(value)` | Less than or equal |
+
+## Examples
+
+```typescript
+// Range on the first field — no second field needed
+await zen.threads
+  .byCategoryCreatedAt(q.gte(someCategory))
+  .findMany()
+
+// Exact first field, range on second
+await zen.threads
+  .byCategoryCreatedAt(categoryId, q.gt(yesterday))
+  .findMany()
+
+// Exact first field, bounded range on second
+await zen.threads
+  .byCategoryCreatedAt(categoryId, q.gte(startTime).lt(endTime))
+  .findMany()
+```
+
+The rule: **the last argument you pass can be a range, everything before it must be exact**. You can stop at any field — trailing fields are simply unconstrained.
+
+## Chaining bounds
+
+Range markers are chainable to create bounded ranges. You can combine one lower bound and one upper bound:
+
+```typescript
+q.gte(start).lt(end)   // [start, end)
+q.gt(start).lte(end)   // (start, end]
+q.gte(start).lte(end)  // [start, end]
+q.gt(start).lt(end)    // (start, end)
+```
+
+## How it maps to Convex
+
+Under the hood, range markers translate to the Convex index range builder:
+
+```typescript
+// Zenvex
+zen.threads.byCategoryCreatedAt(categoryId, q.gte(start).lt(end))
+
+// Equivalent Convex
+ctx.db.query("threads")
+  .withIndex("byCategoryCreatedAt", (q) =>
+    q.eq("categoryId", categoryId).gte("createdAt", start).lt("createdAt", end)
+  )
+```
