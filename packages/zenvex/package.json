@@ -1,6 +1,6 @@
 {
   "name": "zenvex",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -33,11 +33,17 @@
   },
   "license": "MIT",
   "description": "Type-safe query layer for Convex. Relations, cascading deletes, index query ergonomics — no codegen.",
-  "keywords": ["convex", "orm", "relations", "typescript", "query-builder"],
+  "keywords": [
+    "convex",
+    "orm",
+    "relations",
+    "typescript",
+    "query-builder"
+  ],
   "author": "Wytze Sligting",
   "repository": {
     "type": "git",
-    "url": "https://github.com/wytzesligting/zenvex.git",
+    "url": "https://github.com/wytzepiet/zenvex.git",
     "directory": "packages/zenvex"
   }
 }
