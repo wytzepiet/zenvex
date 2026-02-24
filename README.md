@@ -12,7 +12,7 @@ const thread = await zen.threads.find(threadId, {
 });
 ```
 
-**[Read the docs](https://zenvex.vercel.app)**
+**[Read the docs](https://zenvex.vercel.app)** · [`packages/zenvex`](packages/zenvex)
 
 ## License
 
