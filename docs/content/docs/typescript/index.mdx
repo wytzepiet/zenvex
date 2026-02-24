@@ -7,15 +7,15 @@ Zenvex exports a `Zen` type that you can use to type the `zen` object in your cu
 
 ## Zen type
 
-The `Zen` type takes three parameters: the Convex context type, your schema, and your relations.
+The `Zen` type takes two parameters: the Convex context type and your relations object. The schema is automatically inferred from the relations.
 
 ```typescript title="convex/zen.ts"
 import type { Zen } from "zenvex";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
-import schema, { relations } from "./schema";
+import { relations } from "./schema";
 
-export type ZenReader = Zen<QueryCtx, typeof schema, typeof relations>;
-export type ZenWriter = Zen<MutationCtx, typeof schema, typeof relations>;
+export type ZenReader = Zen<QueryCtx, typeof relations>;
+export type ZenWriter = Zen<MutationCtx, typeof relations>;
 ```
 
 ## ZenReader vs ZenWriter

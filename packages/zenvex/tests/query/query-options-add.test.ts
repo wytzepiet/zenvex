@@ -411,7 +411,7 @@ describe("add — nested inside with", () => {
 describe("add — types", () => {
   type DM = DataModelFromSchemaDefinition<typeof schema>;
   type ReaderCtx = { db: GenericDatabaseReader<DM> };
-  type Z = Zen<ReaderCtx, typeof schema, typeof relations>;
+  type Z = Zen<ReaderCtx, typeof relations>;
 
   test("findMany with add returns Doc & A", () => {
     function callAdd(zen: Z) {
@@ -530,7 +530,7 @@ describe("add — types", () => {
 
   test("writer context also has correct add typing", () => {
     type WriterCtx = { db: GenericDatabaseWriter<DM> };
-    type WZ = Zen<WriterCtx, typeof schema, typeof relations>;
+    type WZ = Zen<WriterCtx, typeof relations>;
     function callAdd(zen: WZ) {
       return zen.categories.findMany({
         with: { threads: true },

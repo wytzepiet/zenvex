@@ -29,9 +29,7 @@ const thread = await zen.threads.find(threadId, {
 ## Install
 
 ```bash
-npm install zenvex
-# peer dependency
-npm install convex
+npm install zenvex convex convex-helpers
 ```
 
 ## Quick Start
@@ -379,10 +377,10 @@ Export your `Zen` types for use across your codebase:
 // convex/zen.ts
 import type { Zen } from "zenvex";
 import type { QueryCtx, MutationCtx } from "./_generated/server";
-import schema, { relations } from "./schema";
+import { relations } from "./schema";
 
-export type ZenReader = Zen<QueryCtx, typeof schema, typeof relations>;
-export type ZenWriter = Zen<MutationCtx, typeof schema, typeof relations>;
+export type ZenReader = Zen<QueryCtx, typeof relations>;
+export type ZenWriter = Zen<MutationCtx, typeof relations>;
 ```
 
 ## License

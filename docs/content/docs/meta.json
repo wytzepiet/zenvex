@@ -5,11 +5,14 @@
     "index",
     "why-zenvex",
     "getting-started",
-    "---Guides---",
+    "---Schema---",
     "...relations",
-    "...querying",
-    "...writing",
     "...schema",
+    "---Querying---",
+    "...querying",
+    "---Writing---",
+    "...writing",
+    "---TypeScript---",
     "...typescript"
   ]
 }

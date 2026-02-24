@@ -1,6 +1,6 @@
 {
   "name": "zenvex",
-  "version": "0.0.2",
+  "version": "0.0.4",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -25,11 +25,9 @@
     "type-fest": "^5.4.4",
     "typescript": "^5.9.3"
   },
-  "dependencies": {
-    "convex-helpers": "^0.1.113"
-  },
   "peerDependencies": {
-    "convex": "^1.31.7"
+    "convex": "^1.31.7",
+    "convex-helpers": "^0.1.113"
   },
   "license": "MIT",
   "description": "Type-safe query layer for Convex. Relations, cascading deletes, index query ergonomics — no codegen.",

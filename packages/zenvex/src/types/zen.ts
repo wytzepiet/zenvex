@@ -23,6 +23,15 @@ import type {
   FindOptions,
 } from "./queryOptions.js";
 import type { WithSpec, WithResult } from "./withTypes.js";
+import type { ZEN_SCHEMA } from "../relations/defineRelations.js";
+
+// ---------------------------------------------------------------------------
+// Schema extraction from relations
+// ---------------------------------------------------------------------------
+
+/** Extract the SchemaDefinition embedded in a relations object via ZEN_SCHEMA. */
+export type SchemaFromRelations<R> =
+  R extends { readonly [K in typeof ZEN_SCHEMA]: infer S } ? S : never;
 
 // ---------------------------------------------------------------------------
 // DataModel extraction
@@ -282,8 +291,10 @@ type ZenTableWriter<
 
 export type Zen<
   Ctx extends { db: GenericDatabaseReader<any> },
-  Schema extends SchemaDefinition<any, any>,
   Relations = unknown,
+  Schema extends SchemaDefinition<any, any> = SchemaFromRelations<Relations> extends SchemaDefinition<any, any>
+    ? SchemaFromRelations<Relations>
+    : SchemaDefinition<any, any>,
 > = {
   [TN in TableNamesInDataModel<DMFromSchema<Schema>>]: ZenTable<
     DMFromSchema<Schema>,

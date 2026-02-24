@@ -887,7 +887,7 @@ describe("createZen — types", () => {
   type TestCtx = { db: { get: any; query: any } };
 
   test("zen has table properties", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     expectTypeOf<Z>().toHaveProperty("posts");
     expectTypeOf<Z>().toHaveProperty("threads");
     expectTypeOf<Z>().toHaveProperty("users");
@@ -896,7 +896,7 @@ describe("createZen — types", () => {
   });
 
   test("zen.posts has find, findMany, findFirst", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type Posts = Z["posts"];
     expectTypeOf<Posts>().toHaveProperty("find");
     expectTypeOf<Posts>().toHaveProperty("findMany");
@@ -904,7 +904,7 @@ describe("createZen — types", () => {
   });
 
   test("zen.posts has index methods", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type Posts = Z["posts"];
     expectTypeOf<Posts>().toHaveProperty("byThread");
     expectTypeOf<Posts>().toHaveProperty("byAuthor");
@@ -912,7 +912,7 @@ describe("createZen — types", () => {
   });
 
   test("zen.threads has multi-field index", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type Threads = Z["threads"];
     expectTypeOf<Threads>().toHaveProperty("byCategoryCreatedAt");
     expectTypeOf<Threads>().toHaveProperty("byCategory");
@@ -921,7 +921,7 @@ describe("createZen — types", () => {
   });
 
   test("index method returns ZenQueryBuilder", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type ByThread = Z["posts"]["byThread"];
 
     // byThread takes a GenericId<"threads"> and returns a ZenQueryBuilder
@@ -931,14 +931,14 @@ describe("createZen — types", () => {
   });
 
   test("find takes GenericId of correct table", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type FindPosts = Z["posts"]["find"];
     type FindArg = Parameters<FindPosts>[0];
     expectTypeOf<GenericId<"posts">>().toMatchTypeOf<FindArg>();
   });
 
   test("findMany accepts filter, order, take, select, omit", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type FindMany = Z["posts"]["findMany"];
     type Opts = NonNullable<Parameters<FindMany>[0]>;
 
@@ -950,7 +950,7 @@ describe("createZen — types", () => {
   });
 
   test("findFirst accepts filter, order, select, omit but not take", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type FindFirst = Z["posts"]["findFirst"];
     type Opts = NonNullable<Parameters<FindFirst>[0]>;
 
@@ -962,7 +962,7 @@ describe("createZen — types", () => {
   });
 
   test("find accepts select/omit as second arg", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type Find = Z["posts"]["find"];
     type Opts = NonNullable<Parameters<Find>[1]>;
 
@@ -973,7 +973,7 @@ describe("createZen — types", () => {
   });
 
   test("select and omit are mutually exclusive", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type FindMany = Z["posts"]["findMany"];
     type Opts = NonNullable<Parameters<FindMany>[0]>;
 
@@ -982,7 +982,7 @@ describe("createZen — types", () => {
   });
 
   test("query builder findMany/findFirst accept options", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type QB = ReturnType<Z["posts"]["byThread"]>;
     type FindManyOpts = NonNullable<Parameters<QB["findMany"]>[0]>;
     type FindFirstOpts = NonNullable<Parameters<QB["findFirst"]>[0]>;
@@ -992,7 +992,7 @@ describe("createZen — types", () => {
   });
 
   test("with accepts valid relation names", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     // Test via function call — overloaded findMany selects the with-overload
     function testWith(zen: Z) {
       zen.posts.findMany({ with: { author: true } });
@@ -1003,14 +1003,14 @@ describe("createZen — types", () => {
   });
 
   test("with supports nested spec", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function testNested(zen: Z) {
       zen.posts.findMany({ with: { thread: { with: { category: true } } } });
     }
   });
 
   test("findMany without with returns plain Doc", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type Result = Awaited<ReturnType<Z["posts"]["findMany"]>>;
     // Result should be Doc[] — no extra relation fields
     expectTypeOf<Result[0]>().toHaveProperty("body");
@@ -1018,7 +1018,7 @@ describe("createZen — types", () => {
   });
 
   test("find with relation returns Doc & relation field", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type FindFn = Z["posts"]["find"];
     // When called with { with: { author: true } }, result should have .author
     type ResultWithAuthor = Awaited<ReturnType<typeof callWithAuthor>>;
@@ -1031,7 +1031,7 @@ describe("createZen — types", () => {
   });
 
   test("findMany with cursor returns PaginationResult", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function callPaginate(zen: Z) {
       return zen.posts.findMany({ take: 10, cursor: null });
     }
@@ -1042,7 +1042,7 @@ describe("createZen — types", () => {
   });
 
   test("findMany without cursor returns Doc[]", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function callNoPaginate(zen: Z) {
       return zen.posts.findMany({ take: 10 });
     }
@@ -1053,7 +1053,7 @@ describe("createZen — types", () => {
   });
 
   test("findMany with cursor + with returns PaginationResult with relations", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function callPaginateWith(zen: Z) {
       return zen.posts.findMany({ take: 10, cursor: null, with: { author: true } });
     }
@@ -1065,7 +1065,7 @@ describe("createZen — types", () => {
   });
 
   test("query builder findMany with cursor returns PaginationResult", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function callQbPaginate(zen: Z) {
       return zen.posts.byThread("t1" as GenericId<"threads">).findMany({ take: 5, cursor: null });
     }
@@ -1419,7 +1419,7 @@ describe("createZen — relation query options types", () => {
   type DM = DataModelFromSchemaDefinition<typeof schema>;
 
   test("filter/take/order are available on many relations", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function testManyOpts(zen: Z) {
       zen.threads.findMany({
         with: {
@@ -1434,7 +1434,7 @@ describe("createZen — relation query options types", () => {
   });
 
   test("select/omit accept valid field names on many relation", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function testSelectOmit(zen: Z) {
       zen.threads.findMany({
         with: {
@@ -1450,7 +1450,7 @@ describe("createZen — relation query options types", () => {
   });
 
   test("select/omit available on one relation", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     function testOneSelectOmit(zen: Z) {
       zen.posts.findMany({
         with: {
@@ -1466,7 +1466,7 @@ describe("createZen — relation query options types", () => {
   });
 
   test("filter/take/order NOT available on one descriptors", () => {
-    type Z = Zen<TestCtx & { db: any }, typeof schema, typeof relations>;
+    type Z = Zen<TestCtx & { db: any }, typeof relations>;
     type PostsWith = NonNullable<Parameters<Z["posts"]["findMany"]>[0]> extends { with?: infer W } ? W : never;
     // The author relation spec should not have filter/take/order
     type AuthorSpec = NonNullable<NonNullable<PostsWith>["author"]>;
@@ -1674,7 +1674,7 @@ describe("createZen — write method types", () => {
   type ReaderCtx = { db: GenericDatabaseReader<DM> };
 
   test("writer context exposes insert, patch, upsert", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type Posts = Z["posts"];
     expectTypeOf<Posts>().toHaveProperty("insert");
     expectTypeOf<Posts>().toHaveProperty("patch");
@@ -1682,7 +1682,7 @@ describe("createZen — write method types", () => {
   });
 
   test("reader context does not expose insert, patch, or upsert", () => {
-    type Z = Zen<ReaderCtx, typeof schema, typeof relations>;
+    type Z = Zen<ReaderCtx, typeof relations>;
     type Posts = Z["posts"];
     expectTypeOf<Posts>().not.toHaveProperty("insert");
     expectTypeOf<Posts>().not.toHaveProperty("patch");
@@ -1690,7 +1690,7 @@ describe("createZen — write method types", () => {
   });
 
   test("insert accepts WithoutSystemFields<Doc>", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type InsertFn = Z["posts"]["insert"];
     type InsertArg = Parameters<InsertFn>[0];
     // Should accept the document without _id and _creationTime
@@ -1700,14 +1700,14 @@ describe("createZen — write method types", () => {
   });
 
   test("insert returns Promise<GenericId<table>>", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type InsertFn = Z["posts"]["insert"];
     type Result = Awaited<ReturnType<InsertFn>>;
     expectTypeOf<Result>().toMatchTypeOf<GenericId<"posts">>();
   });
 
   test("patch takes id + partial fields", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type PatchFn = Z["posts"]["patch"];
     type PatchId = Parameters<PatchFn>[0];
     type PatchFields = Parameters<PatchFn>[1];
@@ -1720,14 +1720,14 @@ describe("createZen — write method types", () => {
   });
 
   test("patch returns Promise<void>", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type PatchFn = Z["posts"]["patch"];
     type Result = Awaited<ReturnType<PatchFn>>;
     expectTypeOf<Result>().toBeVoid();
   });
 
   test("upsert takes existing Doc | null + WithoutSystemFields<Doc>", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type UpsertFn = Z["posts"]["upsert"];
     type Existing = Parameters<UpsertFn>[0];
     type Doc = Parameters<UpsertFn>[1];
@@ -1742,14 +1742,14 @@ describe("createZen — write method types", () => {
   });
 
   test("upsert returns Promise<GenericId<table>>", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type UpsertFn = Z["posts"]["upsert"];
     type Result = Awaited<ReturnType<UpsertFn>>;
     expectTypeOf<Result>().toMatchTypeOf<GenericId<"posts">>();
   });
 
   test("writer context still has read methods", () => {
-    type Z = Zen<WriterCtx, typeof schema, typeof relations>;
+    type Z = Zen<WriterCtx, typeof relations>;
     type Posts = Z["posts"];
     expectTypeOf<Posts>().toHaveProperty("find");
     expectTypeOf<Posts>().toHaveProperty("findMany");

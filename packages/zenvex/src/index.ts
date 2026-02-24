@@ -10,7 +10,7 @@ export type {
   RelationDescriptor,
   OnDeleteAction,
 } from "./relations/types.js";
-export type { Zen, ZenQueryBuilder } from "./types/zen.js";
+export type { Zen, ZenQueryBuilder, SchemaFromRelations } from "./types/zen.js";
 export type {
   FindManyOptions,
   FindManyPaginateOptions,

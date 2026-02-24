@@ -50,7 +50,7 @@ export function createZen<
   // GenericDatabaseReader<GenericDataModel>. Using `any` allows concrete ctx types.
   Ctx extends { db: GenericDatabaseReader<any> },
   Relations extends { readonly [ZEN_SCHEMA]: SchemaDefinition<any, any> },
->(ctx: Ctx, relations: Relations): Zen<Ctx, ExtractSchema<Relations>, Relations> {
+>(ctx: Ctx, relations: Relations): Zen<Ctx, Relations> {
   const { db } = ctx;
   const schema = relations[ZEN_SCHEMA];
   const tables = (schema as unknown as { tables: Record<string, Pick<IntrospectableTable, " indexes">> }).tables;
@@ -67,7 +67,7 @@ export function createZen<
   // property access and returns correctly-typed table proxies. The Zen<Ctx, Schema, Relations>
   // return type is enforced by the generic constraint.
   // Tested: tests/query/createZen.test.ts
-  return makeGetProxy<Zen<Ctx, ExtractSchema<Relations>, Relations>>((tableName) => {
+  return makeGetProxy<Zen<Ctx, Relations>>((tableName) => {
     const indexCache = tableIndexCache.get(tableName);
     if (!indexCache) {
       throw new Error(`[zen] Unknown table: "${tableName}"`);
