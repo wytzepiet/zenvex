@@ -2,6 +2,8 @@
 
 Type-safe relations, cascading deletes, and ergonomic index queries for [Convex](https://convex.dev). No codegen — all types inferred via generics.
 
+**[Read the docs](https://zenvex.vercel.app)**
+
 ```typescript
 const thread = await zen.threads.find(threadId, {
   with: {

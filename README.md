@@ -12,9 +12,7 @@ const thread = await zen.threads.find(threadId, {
 });
 ```
 
-## Documentation
-
-See [`packages/zenvex`](packages/zenvex) for install instructions, API docs, and usage examples.
+**[Read the docs](https://zenvex.vercel.app)**
 
 ## License
 
