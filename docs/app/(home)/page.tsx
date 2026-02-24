@@ -111,7 +111,7 @@ export default async function HomePage() {
       <div
         className={`${mono} text-[11px] tracking-[3px] uppercase text-fd-muted-foreground mb-6`}
       >
-        Type-safe queries for Convex
+        Built for Convex
       </div>
       <h1
         className={`${serif} text-[clamp(36px,5vw,56px)] font-normal leading-[1.1] mb-5`}
@@ -283,12 +283,15 @@ await ctx.db.delete(threadId);`}
 
       {/* Bottom CTA */}
       <div className="mt-24 text-center">
-        <p className={`${mono} text-[13px] text-[#52525b]`}>
-          Same indexes. Same performance.{" "}
-          <Link href="/docs" className="text-[#22d3ee] hover:underline">
-            Less code.
-          </Link>
+        <p className={`${mono} text-[13px] text-[#52525b] mb-8`}>
+          Same indexes. Same performance. Less code.
         </p>
+        <Link
+          href="/docs"
+          className="rounded-lg bg-fd-primary px-8 py-3 text-sm font-medium text-fd-primary-foreground transition-colors hover:opacity-90"
+        >
+          Become enlightened
+        </Link>
       </div>
     </div>
   );
