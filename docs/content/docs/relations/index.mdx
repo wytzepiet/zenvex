@@ -24,9 +24,9 @@ export const relations = defineRelations(schema, {
 
 | Type | Description | Example |
 |------|-------------|---------|
-| [`r.one`](/docs/relations/one) | Many-to-one via FK field | `r.one.users("authorId")` |
-| [`r.many`](/docs/relations/many) | One-to-many via index | `r.many.posts({ onDelete: "cascade" })` |
-| [`r.many.through`](/docs/relations/through) | Many-to-many via join table | `r.many.tags({ through: "postTags" })` |
+| [`Many-to-One`](/docs/relations/one) | Via a foreign key field | `r.one.users("authorId")` |
+| [`One-to-Many`](/docs/relations/many) | Via an index on the target table | `r.many.posts({ onDelete: "cascade" })` |
+| [`Many-to-Many`](/docs/relations/through) | Via a join table | `r.many.tags({ through: "postTags" })` |
 
 ## How it works
 

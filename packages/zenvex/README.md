@@ -31,7 +31,13 @@ const thread = await zen.threads.find(threadId, {
 ## Install
 
 ```bash
-npm install zenvex convex convex-helpers
+npm install zenvex
+```
+
+Zenvex requires `convex` and `convex-helpers` as peer dependencies. You likely already have `convex` installed — if you don't have `convex-helpers` yet, add it too:
+
+```bash
+npm install convex-helpers
 ```
 
 ## Quick Start

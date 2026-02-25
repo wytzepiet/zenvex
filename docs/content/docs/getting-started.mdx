@@ -6,19 +6,37 @@ description: Install Zenvex, define relations, and run your first query.
 ## Install
 
 ```bash tab="npm"
-npm install zenvex convex convex-helpers
+npm install zenvex
 ```
 
 ```bash tab="bun"
-bun add zenvex convex convex-helpers
+bun add zenvex
 ```
 
 ```bash tab="pnpm"
-pnpm add zenvex convex convex-helpers
+pnpm add zenvex
 ```
 
 ```bash tab="yarn"
-yarn add zenvex convex convex-helpers
+yarn add zenvex
+```
+
+Zenvex requires `convex` and `convex-helpers` as peer dependencies. You likely already have `convex` installed — if you don't have `convex-helpers` yet, add it too:
+
+```bash tab="npm"
+npm install convex-helpers
+```
+
+```bash tab="bun"
+bun add convex-helpers
+```
+
+```bash tab="pnpm"
+pnpm add convex-helpers
+```
+
+```bash tab="yarn"
+yarn add convex-helpers
 ```
 
 ## 1. Define your schema and relations
